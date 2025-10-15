@@ -33,9 +33,34 @@ get_column_value() {
     echo "$row" | awk -v col=$((col_index + 1)) '{print $col}'
 }
 
+# Function to get TRAN type from parent device
+get_tran_type() {
+    local current_index="$1"
+    local current_name=$(get_column_value "${current_drive_state[$current_index]}" "NAME")
+    
+    # Extract the base device name (e.g., sda from └─sda1)
+    local base_device=$(echo "$current_name" | sed 's/.*[─├└]//; s/[0-9]*$//')
+    
+    # Search backwards for the parent device
+    for ((i=current_index-1; i>=0; i--)); do
+        local check_row="${current_drive_state[$i]}"
+        local check_name=$(get_column_value "$check_row" "NAME")
+        
+        # If we find the parent device (no tree characters, matches base name)
+        if [[ "$check_name" == "$base_device" ]]; then
+            local tran=$(get_column_value "$check_row" "TRAN")
+            echo "$tran"
+            return
+        fi
+    done
+    
+    echo ""
+}
+
 # Function to print partition state
 print_partition_state() {
     local row="$1"
+    local row_index="$2"
     
     local name=$(get_column_value "$row" "NAME")
     local mountpoint=$(get_column_value "$row" "MOUNTPOINT")
@@ -43,16 +68,16 @@ print_partition_state() {
     local fstype=$(get_column_value "$row" "FSTYPE")
     local label=$(get_column_value "$row" "LABEL")
     local size=$(get_column_value "$row" "SIZE")
-    local tran=$(get_column_value "$row" "TRAN")
     
-    # Strip all characters before sd* (or other drive patterns)
-    local stripped_partition=$(echo "$name" | sed 's/^[^s]*\(sd[a-z][0-9]*\)/\1/' | sed 's/^[^n]*\(nvme[0-9]n[0-9]p[0-9]*\)/\1/')
+    # Get TRAN from parent device
+    local tran=$(get_tran_type "$row_index")
     
-    # If name starts with sd or nvme, prepend /dev/
-    if [[ "$name" =~ ^(sd|nvme) ]]; then
+    # Strip tree characters and extract device name
+    local stripped_partition=$(echo "$name" | sed 's/.*[─├└]//')
+    
+    # Prepend /dev/ if it's a device partition
+    if [[ "$stripped_partition" =~ ^(sd[a-z][0-9]+|nvme[0-9]+n[0-9]+p[0-9]+) ]]; then
         stripped_partition="/dev/$stripped_partition"
-    else
-        stripped_partition="$name"
     fi
     
     echo "  Drive location: $stripped_partition"
@@ -91,8 +116,8 @@ initial_test() {
         echo "Error: You have multiple partitions with the label: UNRAID. You must only have one or the system may not boot properly. Please resolve"
         echo ""
         
-        for row in "${unraid_partitions[@]}"; do
-            print_partition_state "$row"
+        for idx in "${!unraid_partitions[@]}"; do
+            print_partition_state "${unraid_partitions[$idx]}" "${unraid_indices[$idx]}"
         done
         
         exit 1
@@ -101,7 +126,7 @@ initial_test() {
     # We have exactly one UNRAID partition
     echo "The current booted environment is as follows"
     echo ""
-    print_partition_state "${unraid_partitions[0]}"
+    print_partition_state "${unraid_partitions[0]}" "${unraid_indices[0]}"
 }
 
 # Run the main function
