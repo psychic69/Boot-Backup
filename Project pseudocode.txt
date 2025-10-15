@@ -1,0 +1,71 @@
+Command to get the current information:
+
+lsblk -o NAME,UUID,FSTYPE,SIZE,MOUNTPOINT,LABEL,TRAN
+
+NAME        UUID                                 FSTYPE     SIZE MOUNTPOINT           LABEL     TRAN
+loop0                                            squashfs 579.7M /usr
+loop1                                            squashfs 169.8M /lib
+loop2       a06afa70-9ee7-46d0-b019-cee54079c940 btrfs       30G /var/lib/docker
+loop3       e3179321-16ef-44fe-a20d-d219ca06572e btrfs        1G /etc/libvirt
+sda                                                         7.5G                                usb
+└─sda1      D467-DF06                            vfat       7.5G /boot                UNRAID
+sdb                                                        12.7T                                sata
+└─sdb1      e3b5536e-2114-4669-89a8-94c8af610000 xfs       12.7T
+sdc                                                         1.8T                                sata
+└─sdc1      8de3d875-14ba-41cd-8620-f0ccd4f5004d btrfs      1.8T
+sdd                                                         1.9T                                sata
+└─sdd1      8de3d875-14ba-41cd-8620-f0ccd4f5004d btrfs      1.9T /mnt/sata_ssd_cache
+sde                                                        12.7T                                sata
+└─sde1      700a986d-bc6e-4f7e-b3d9-5a17d88f6547 xfs       12.7T
+sdf                                                        12.7T                                sata
+└─sdf1      a79f548e-88d0-4512-b5a5-eb30b769a606 xfs       12.7T
+sdg                                                        12.7T                                sata
+└─sdg1      34209f8d-15aa-4c05-8fd4-25efc087c341 xfs       12.7T
+sdh                                                         7.5G                                usb
+└─sdh1      91FC-86D8                            vfat       7.5G /mnt/disks/UNRAID_DR UNRAID_DR
+md1p1                                                      12.7T /mnt/disk1
+md4p1                                                      12.7T /mnt/disk4
+md5p1                                                      12.7T /mnt/disk5
+nvme2n1                                                   465.8G                                nvme
+└─nvme2n1p1 bc1a91b9-3d06-431f-9938-42755bac76d3 btrfs    465.8G /mnt/nvme_ssd_cache            nvme
+nvme3n1                                                   465.8G                                nvme
+└─nvme3n1p1 bc1a91b9-3d06-431f-9938-42755bac76d3 btrfs    465.8G                                nvme
+nvme0n1                                                   953.9G                                nvme
+nvme1n1                                                   953.9G                                nvme
+└─nvme1n1p1 766ba24f-d1f7-4358-a2e7-d61c53847ded xfs      953.9G /mnt/nvme_vm_cache             nvme
+
+/dev/disk/by-uuid/
+
+backup:  91FC-86D8
+active:  D467-DF06
+
+fatlabel /dev/sdXN "NEW_LABEL"
+
+test:
+    fatlabel /dev/disk/by-uuid/91FC-86D8 "UNRAID_DR"
+
+    Current mountpoint is /boot and label UNRAID
+
+PSEUDOCODE:
+
+The labels for the array (current_drive_state) will be the first row from the file ./test-lsblk and will be loaded into variable current_drive_headers
+
+    First function, initial_test
+
+    1. load file ./test-lsblk  into an array (current_drive_state) ignoring the first row which is the header/   current drive headers will be used for lookup to index the column in the array. So the header location will dictate the column to index.
+    2. Create a function print_partition_state which takes a row from the current drive state as input and prints the following:
+        Drive location: [strip all characters before sd*.  Put in temp variable stripped_partition and then print as /dev/$stripped_partition]
+        Current Mountpoint: MOUNTPOINT
+        UUID: UUID
+        File type: FSTYPE
+        Current Label: LABEL
+        Drive Size: SIZE
+        File Type: TRAN
+
+    2. Check to see if there is one and only one LABEL (column 6) UNRAID and in NAME (col 1) the final digit is 1.
+        
+        a. If not, print all rows matching UNRAID, send them to function print_partition_state.    Print this error first: "Error: You have multiple partitions with the label: UNRAID.  You must only have one or the system may not boot properly.  Please resolve"
+        b. exit with error
+    3.  There is one partition with LABEL UNRAID.
+       a. Print "The current booted environment is as follows"
+       b. Send the current row index with LABEL UNRAID to print_partition_state
