@@ -4,9 +4,11 @@
 declare -a current_drive_state
 DEBUG=false
 LOG_FILE=""
-LOG_DIR="/tmp/log/unraid-boot-check"
+LOG_DIR="/var/log/unraid-boot-check"
 SNAPSHOTS=5
 RETENTION_DAYS=30
+BOOT_UUID=""
+BOOT_MOUNT=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -142,6 +144,26 @@ file_rotation() {
     return 0
 }
 
+# --- Convert Bytes to Human Readable Function ---
+# Converts a size value in bytes to gigabytes with 2 decimal precision.
+#
+# @param {string} size - The size in bytes (e.g., "8053063680")
+# @return {string} Human readable format: "XX.XXG (YYYY bytes)"
+convert_bytes_to_human() {
+    local bytes="$1"
+    
+    # Check if bytes is empty or not a number
+    if [[ -z "$bytes" ]] || ! [[ "$bytes" =~ ^[0-9]+$ ]]; then
+        echo "0.00G (0 bytes)"
+        return
+    fi
+    
+    # Convert bytes to gigabytes with 2 decimal precision
+    local gigabytes=$(echo "scale=2; $bytes / (1024 * 1024 * 1024)" | bc)
+    
+    echo "${gigabytes}G (${bytes} bytes)"
+}
+
 # Debug print function
 debug_print() {
     if [ "$DEBUG" = true ]; then
@@ -220,6 +242,9 @@ print_partition_state() {
         tran=$(get_tran_type "$row_index")
     fi
     
+    # Convert size to human readable format with bytes
+    local size_human=$(convert_bytes_to_human "$size")
+    
     # Prepend /dev/ if it's a device partition
     local drive_location="$name"
     if [[ "$name" =~ ^(sd[a-z][0-9]+|nvme[0-9]+n[0-9]+p[0-9]+|md[0-9]+p[0-9]+) ]]; then
@@ -231,7 +256,7 @@ print_partition_state() {
     log_message "  UUID: $uuid"
     log_message "  File type: $fstype"
     log_message "  Current Label: $label"
-    log_message "  Drive Size: $size"
+    log_message "  Drive Size: $size_human"
     log_message "  Transport Type: $tran"
     log_message ""
 }
@@ -273,9 +298,26 @@ initial_test() {
     fi
     
     # We have exactly one UNRAID partition
+    # Extract and store boot partition information
+    local boot_row="${unraid_partitions[0]}"
+    BOOT_UUID=$(get_column_value "$boot_row" "UUID")
+    BOOT_MOUNT=$(get_column_value "$boot_row" "MOUNTPOINT")
+    
+    # Validate that BOOT_MOUNT is /boot
+    if [[ "$BOOT_MOUNT" != "/boot" ]]; then
+        log_message "FATAL: UNRAID partition is not mounted at /boot. Current mount point: '$BOOT_MOUNT'"
+        log_message "The UNRAID boot partition must be mounted at /boot for the system to function correctly."
+        log_message ""
+        print_partition_state "${unraid_partitions[0]}" "${unraid_indices[0]}"
+        exit 1
+    fi
+    
     log_message "INFO: The current booted environment is as follows"
     log_message ""
     print_partition_state "${unraid_partitions[0]}" "${unraid_indices[0]}"
+    
+    debug_print "Boot UUID set to: $BOOT_UUID"
+    debug_print "Boot mount set to: $BOOT_MOUNT"
 }
 
 # Initialize logging
