@@ -4,7 +4,7 @@
 declare -a current_drive_state
 DEBUG=false
 LOG_FILE=""
-LOG_DIR="/var/log/unraid-boot-check"
+LOG_DIR="/tmp/log/unraid-boot-check"
 SNAPSHOTS=5
 RETENTION_DAYS=30
 
@@ -50,9 +50,18 @@ log_message() {
 setup_logging() {
     local log_dir="${LOG_DIR}/logs"
 
-    # First, ensure the base backup location is accessible.
-    if [ ! -d "${LOG_DIR}" ] || [ ! -w "${LOG_DIR}" ]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Base backup location '${LOG_DIR}' does not exist or is not writable. Cannot setup logging." >&2
+    # First, try to create the base LOG_DIR if it doesn't exist.
+    if [ ! -d "${LOG_DIR}" ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - INFO: Base log location '${LOG_DIR}' does not exist. Attempting to create it." >&2
+        if ! mkdir -p "${LOG_DIR}"; then
+            echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Failed to create base log location '${LOG_DIR}'. Cannot setup logging." >&2
+            return 1
+        fi
+    fi
+
+    # Verify the base LOG_DIR is writable.
+    if [ ! -w "${LOG_DIR}" ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Base log location '${LOG_DIR}' is not writable. Cannot setup logging." >&2
         return 1
     fi
 
