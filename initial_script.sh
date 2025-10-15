@@ -3,6 +3,29 @@
 # Global variables
 declare -a current_drive_state
 declare -A current_drive_headers
+DEBUG=false
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -debug)
+            DEBUG=true
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [-debug]"
+            exit 1
+            ;;
+    esac
+done
+
+# Debug print function
+debug_print() {
+    if [ "$DEBUG" = true ]; then
+        echo "DEBUG: $*" >&2
+    fi
+}
 
 # Function to load the lsblk data
 load_drive_state() {
@@ -39,21 +62,30 @@ get_tran_type() {
     local current_name=$(get_column_value "${current_drive_state[$current_index]}" "NAME")
     
     # Extract the base device name (e.g., sda from └─sda1)
-    local base_device=$(echo "$current_name" | sed 's/.*[─├└]//; s/[0-9]*$//')
+    # Remove tree characters and partition number
+    local base_device=$(echo "$current_name" | sed 's/.*[─├└]//; s/[0-9]*$//' | sed 's/p$//')
+    
+    debug_print "Current name: $current_name"
+    debug_print "Looking for base device: $base_device"
+    debug_print "Starting from index: $current_index"
     
     # Search backwards for the parent device
     for ((i=current_index-1; i>=0; i--)); do
         local check_row="${current_drive_state[$i]}"
         local check_name=$(get_column_value "$check_row" "NAME")
+        local check_tran=$(get_column_value "$check_row" "TRAN")
+        
+        debug_print "Checking index $i: name='$check_name' tran='$check_tran'"
         
         # If we find the parent device (no tree characters, matches base name)
         if [[ "$check_name" == "$base_device" ]]; then
-            local tran=$(get_column_value "$check_row" "TRAN")
-            echo "$tran"
+            debug_print "Found parent device!"
+            echo "$check_tran"
             return
         fi
     done
     
+    debug_print "No parent device found"
     echo ""
 }
 
