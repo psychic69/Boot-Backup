@@ -2,7 +2,6 @@
 
 # Global variables
 declare -a current_drive_state
-declare -A current_drive_headers
 DEBUG=false
 
 # Parse command line arguments
@@ -29,37 +28,23 @@ debug_print() {
 
 # Function to load the lsblk data
 load_drive_state() {
-    local line_num=0
-    
     while IFS= read -r line; do
-        if [ $line_num -eq 0 ]; then
-            # Parse header row - need to track column positions
-            local col_num=0
-            local pos=0
-            for header in $line; do
-                current_drive_headers[$header]=$col_num
-                ((col_num++))
-            done
-        else
-            # Store data rows
-            current_drive_state+=("$line")
-        fi
-        ((line_num++))
+        current_drive_state+=("$line")
     done < "./test-lsblk"
 }
 
-# Function to get column value from a row
+# Function to get column value from a key=value pair line
 get_column_value() {
     local row="$1"
     local column_name="$2"
-    local col_index="${current_drive_headers[$column_name]}"
     
-    # Use awk with multiple spaces as field separator to properly handle columns
-    local value=$(echo "$row" | awk -v col=$((col_index + 1)) '{print $col}')
-    
-    debug_print "Getting column '$column_name' (index $col_index) from row, value='$value'"
-    
-    echo "$value"
+    # Extract value using parameter expansion
+    local pattern="${column_name}=\"([^\"]*)\""
+    if [[ $row =~ $pattern ]]; then
+        echo "${BASH_REMATCH[1]}"
+    else
+        echo ""
+    fi
 }
 
 # Function to get TRAN type from parent device
@@ -67,9 +52,8 @@ get_tran_type() {
     local current_index="$1"
     local current_name=$(get_column_value "${current_drive_state[$current_index]}" "NAME")
     
-    # Extract the base device name (e.g., sda from └─sda1)
-    # Remove tree characters and partition number
-    local base_device=$(echo "$current_name" | sed 's/.*[─├└]//; s/[0-9]*$//' | sed 's/p$//')
+    # Extract the base device name (e.g., sda from sda1, nvme0n1 from nvme0n1p1)
+    local base_device=$(echo "$current_name" | sed 's/[0-9]*$//' | sed 's/p$//')
     
     debug_print "Current name: $current_name"
     debug_print "Looking for base device: $base_device"
@@ -83,7 +67,7 @@ get_tran_type() {
         
         debug_print "Checking index $i: name='$check_name' tran='$check_tran'"
         
-        # If we find the parent device (no tree characters, matches base name)
+        # If we find the parent device (matches base name)
         if [[ "$check_name" == "$base_device" ]]; then
             debug_print "Found parent device with TRAN='$check_tran'"
             echo "$check_tran"
@@ -106,19 +90,20 @@ print_partition_state() {
     local fstype=$(get_column_value "$row" "FSTYPE")
     local label=$(get_column_value "$row" "LABEL")
     local size=$(get_column_value "$row" "SIZE")
+    local tran=$(get_column_value "$row" "TRAN")
     
-    # Get TRAN from parent device
-    local tran=$(get_tran_type "$row_index")
-    
-    # Strip tree characters and extract device name
-    local stripped_partition=$(echo "$name" | sed 's/.*[─├└]//')
-    
-    # Prepend /dev/ if it's a device partition
-    if [[ "$stripped_partition" =~ ^(sd[a-z][0-9]+|nvme[0-9]+n[0-9]+p[0-9]+) ]]; then
-        stripped_partition="/dev/$stripped_partition"
+    # If TRAN is empty, get it from parent device
+    if [[ -z "$tran" ]]; then
+        tran=$(get_tran_type "$row_index")
     fi
     
-    echo "  Drive location: $stripped_partition"
+    # Prepend /dev/ if it's a device partition
+    local drive_location="$name"
+    if [[ "$name" =~ ^(sd[a-z][0-9]+|nvme[0-9]+n[0-9]+p[0-9]+|md[0-9]+p[0-9]+) ]]; then
+        drive_location="/dev/$name"
+    fi
+    
+    echo "  Drive location: $drive_location"
     echo "  Current Mountpoint: $mountpoint"
     echo "  UUID: $uuid"
     echo "  File type: $fstype"
@@ -142,8 +127,11 @@ initial_test() {
         local label=$(get_column_value "$row" "LABEL")
         local name=$(get_column_value "$row" "NAME")
         
+        debug_print "Checking row $i: name='$name' label='$label'"
+        
         # Check if label is UNRAID and name ends in 1
         if [[ "$label" == "UNRAID" ]] && [[ "$name" =~ 1$ ]]; then
+            debug_print "Found UNRAID partition: $name"
             unraid_partitions+=("$row")
             unraid_indices+=("$i")
         fi

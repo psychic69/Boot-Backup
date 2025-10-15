@@ -1,31 +1,30 @@
-NAME        UUID                                 FSTYPE     SIZE MOUNTPOINT           LABEL     TRAN
-loop0                                            squashfs 579.7M /usr
-loop1                                            squashfs 169.8M /lib
-loop2       a06afa70-9ee7-46d0-b019-cee54079c940 btrfs       30G /var/lib/docker
-loop3       e3179321-16ef-44fe-a20d-d219ca06572e btrfs        1G /etc/libvirt
-sda                                                         7.5G                                usb
-└─sda1      D467-DF06                            vfat       7.5G /boot                UNRAID
-sdb                                                        12.7T                                sata
-└─sdb1      e3b5536e-2114-4669-89a8-94c8af610000 xfs       12.7T
-sdc                                                         1.8T                                sata
-└─sdc1      8de3d875-14ba-41cd-8620-f0ccd4f5004d btrfs      1.8T
-sdd                                                         1.9T                                sata
-└─sdd1      8de3d875-14ba-41cd-8620-f0ccd4f5004d btrfs      1.9T /mnt/sata_ssd_cache
-sde                                                        12.7T                                sata
-└─sde1      700a986d-bc6e-4f7e-b3d9-5a17d88f6547 xfs       12.7T
-sdf                                                        12.7T                                sata
-└─sdf1      a79f548e-88d0-4512-b5a5-eb30b769a606 xfs       12.7T
-sdg                                                        12.7T                                sata
-└─sdg1      34209f8d-15aa-4c05-8fd4-25efc087c341 xfs       12.7T
-sdh                                                         7.5G                                usb
-└─sdh1      91FC-86D8                            vfat       7.5G /mnt/disks/UNRAID_DR UNRAID_DR
-md1p1                                                      12.7T /mnt/disk1
-md4p1                                                      12.7T /mnt/disk4
-md5p1                                                      12.7T /mnt/disk5
-nvme2n1                                                   465.8G                                nvme
-└─nvme2n1p1 bc1a91b9-3d06-431f-9938-42755bac76d3 btrfs    465.8G /mnt/nvme_ssd_cache            nvme
-nvme3n1                                                   465.8G                                nvme
-└─nvme3n1p1 bc1a91b9-3d06-431f-9938-42755bac76d3 btrfs    465.8G                                nvme
-nvme0n1                                                   953.9G                                nvme
-nvme1n1                                                   953.9G                                nvme
-└─nvme1n1p1 766ba24f-d1f7-4358-a2e7-d61c53847ded xfs      953.9G /mnt/nvme_vm_cache             nvme
+NAME="loop0" UUID="" FSTYPE="squashfs" SIZE="579.7M" MOUNTPOINT="/usr" LABEL="" TRAN=""
+NAME="loop1" UUID="" FSTYPE="squashfs" SIZE="169.8M" MOUNTPOINT="/lib" LABEL="" TRAN=""
+NAME="loop2" UUID="a06afa70-9ee7-46d0-b019-cee54079c940" FSTYPE="btrfs" SIZE="30G" MOUNTPOINT="/var/lib/docker" LABEL="" TRAN=""
+NAME="loop3" UUID="e3179321-16ef-44fe-a20d-d219ca06572e" FSTYPE="btrfs" SIZE="1G" MOUNTPOINT="/etc/libvirt" LABEL="" TRAN=""
+NAME="sda" UUID="" FSTYPE="" SIZE="7.5G" MOUNTPOINT="" LABEL="" TRAN="usb"
+NAME="sda1" UUID="D467-DF06" FSTYPE="vfat" SIZE="7.5G" MOUNTPOINT="/boot" LABEL="UNRAID" TRAN=""
+NAME="sdb" UUID="" FSTYPE="" SIZE="12.7T" MOUNTPOINT="" LABEL="" TRAN="sata"
+NAME="sdb1" UUID="e3b5536e-2114-4669-89a8-94c8af610000" FSTYPE="xfs" SIZE="12.7T" MOUNTPOINT="" LABEL="" TRAN=""
+NAME="sdc" UUID="" FSTYPE="" SIZE="1.8T" MOUNTPOINT="" LABEL="" TRAN="sata"
+NAME="sdc1" UUID="8de3d875-14ba-41cd-8620-f0ccd4f5004d" FSTYPE="btrfs" SIZE="1.8T" MOUNTPOINT="" LABEL="" TRAN=""
+NAME="sdd" UUID="" FSTYPE="" SIZE="1.9T" MOUNTPOINT="" LABEL="" TRAN="sata"
+NAME="sdd1" UUID="8de3d875-14ba-41cd-8620-f0ccd4f5004d" FSTYPE="btrfs" SIZE="1.9T" MOUNTPOINT="/mnt/sata_ssd_cache" LABEL="" TRAN=""
+NAME="sde" UUID="" FSTYPE="" SIZE="12.7T" MOUNTPOINT="" LABEL="" TRAN="sata"
+NAME="sde1" UUID="700a986d-bc6e-4f7e-b3d9-5a17d88f6547" FSTYPE="xfs" SIZE="12.7T" MOUNTPOINT="" LABEL="" TRAN=""
+NAME="sdf" UUID="" FSTYPE="" SIZE="12.7T" MOUNTPOINT="" LABEL="" TRAN="sata"
+NAME="sdf1" UUID="a79f548e-88d0-4512-b5a5-eb30b769a606" FSTYPE="xfs" SIZE="12.7T" MOUNTPOINT="" LABEL="" TRAN=""
+NAME="sdg" UUID="" FSTYPE="" SIZE="12.7T" MOUNTPOINT="" LABEL="" TRAN="sata"
+NAME="sdg1" UUID="34209f8d-15aa-4c05-8fd4-25efc087c341" FSTYPE="xfs" SIZE="12.7T" MOUNTPOINT="" LABEL="" TRAN=""
+NAME="sdh" UUID="" FSTYPE="" SIZE="7.5G" MOUNTPOINT="" LABEL="" TRAN="usb"
+NAME="sdh1" UUID="91FC-86D8" FSTYPE="vfat" SIZE="7.5G" MOUNTPOINT="/mnt/disks/UNRAID_DR" LABEL="UNRAID_DR" TRAN=""
+NAME="md1p1" UUID="" FSTYPE="" SIZE="12.7T" MOUNTPOINT="/mnt/disk1" LABEL="" TRAN=""
+NAME="md4p1" UUID="" FSTYPE="" SIZE="12.7T" MOUNTPOINT="/mnt/disk4" LABEL="" TRAN=""
+NAME="md5p1" UUID="" FSTYPE="" SIZE="12.7T" MOUNTPOINT="/mnt/disk5" LABEL="" TRAN=""
+NAME="nvme2n1" UUID="" FSTYPE="" SIZE="465.8G" MOUNTPOINT="" LABEL="" TRAN="nvme"
+NAME="nvme2n1p1" UUID="bc1a91b9-3d06-431f-9938-42755bac76d3" FSTYPE="btrfs" SIZE="465.8G" MOUNTPOINT="/mnt/nvme_ssd_cache" LABEL="" TRAN="nvme"
+NAME="nvme3n1" UUID="" FSTYPE="" SIZE="465.8G" MOUNTPOINT="" LABEL="" TRAN="nvme"
+NAME="nvme3n1p1" UUID="bc1a91b9-3d06-431f-9938-42755bac76d3" FSTYPE="btrfs" SIZE="465.8G" MOUNTPOINT="" LABEL="" TRAN="nvme"
+NAME="nvme0n1" UUID="" FSTYPE="" SIZE="953.9G" MOUNTPOINT="" LABEL="" TRAN="nvme"
+NAME="nvme1n1" UUID="" FSTYPE="" SIZE="953.9G" MOUNTPOINT="" LABEL="" TRAN="nvme"
+NAME="nvme1n1p1" UUID="766ba24f-d1f7-4358-a2e7-d61c53847ded" FSTYPE="xfs" SIZE="953.9G" MOUNTPOINT="/mnt/nvme_vm_cache" LABEL="" TRAN="nvme"
