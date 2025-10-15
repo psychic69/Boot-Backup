@@ -158,8 +158,8 @@ convert_bytes_to_human() {
         return
     fi
     
-    # Convert bytes to gigabytes with 2 decimal precision
-    local gigabytes=$(echo "scale=2; $bytes / (1024 * 1024 * 1024)" | bc)
+    # Convert bytes to gigabytes with 2 decimal precision using awk
+    local gigabytes=$(awk "BEGIN {printf \"%.2f\", $bytes / (1024 * 1024 * 1024)}")
     
     echo "${gigabytes}G (${bytes} bytes)"
 }
