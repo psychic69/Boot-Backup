@@ -33,8 +33,9 @@ load_drive_state() {
     
     while IFS= read -r line; do
         if [ $line_num -eq 0 ]; then
-            # Parse header row
+            # Parse header row - need to track column positions
             local col_num=0
+            local pos=0
             for header in $line; do
                 current_drive_headers[$header]=$col_num
                 ((col_num++))
@@ -53,7 +54,12 @@ get_column_value() {
     local column_name="$2"
     local col_index="${current_drive_headers[$column_name]}"
     
-    echo "$row" | awk -v col=$((col_index + 1)) '{print $col}'
+    # Use awk with multiple spaces as field separator to properly handle columns
+    local value=$(echo "$row" | awk -v col=$((col_index + 1)) '{print $col}')
+    
+    debug_print "Getting column '$column_name' (index $col_index) from row, value='$value'"
+    
+    echo "$value"
 }
 
 # Function to get TRAN type from parent device
@@ -79,7 +85,7 @@ get_tran_type() {
         
         # If we find the parent device (no tree characters, matches base name)
         if [[ "$check_name" == "$base_device" ]]; then
-            debug_print "Found parent device!"
+            debug_print "Found parent device with TRAN='$check_tran'"
             echo "$check_tran"
             return
         fi
