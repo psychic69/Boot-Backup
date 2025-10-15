@@ -3,6 +3,10 @@
 # Global variables
 declare -a current_drive_state
 DEBUG=false
+LOG_FILE=""
+LOG_DIR="/var/log/unraid-boot-check"
+SNAPSHOTS=5
+RETENTION_DAYS=30
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -19,10 +23,120 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# --- Logging Function ---
+# A simple function to log messages to a specified file and to the console.
+# Relies on the global LOG_FILE variable being set by setup_logging().
+#
+# @param {string} Message - The message to be logged.
+log_message() {
+    local message="$1"
+    # Fallback to stderr if logging has not been initialized.
+    if [[ -z "${LOG_FILE}" ]]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - UNINITIALIZED_LOG - ${message}" >&2
+        return
+    fi
+    # Logs the message with a timestamp to both the console and the log file.
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ${message}" | tee -a "${LOG_FILE}"
+}
+
+# --- Logging Setup Function ---
+# Initializes the logging environment, creates the log directory, and sets the
+# log file for the current run.
+#
+# @uses global LOG_DIR
+# @uses global SNAPSHOTS
+# @uses global LOG_FILE
+# @return {integer} 0 for success, 1 for failure.
+setup_logging() {
+    local log_dir="${LOG_DIR}/logs"
+
+    # First, ensure the base backup location is accessible.
+    if [ ! -d "${LOG_DIR}" ] || [ ! -w "${LOG_DIR}" ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Base backup location '${LOG_DIR}' does not exist or is not writable. Cannot setup logging." >&2
+        return 1
+    fi
+
+    # Create the log directory if it doesn't exist.
+    if ! mkdir -p "${log_dir}"; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Failed to create log directory '${log_dir}'." >&2
+        return 1
+    fi
+
+    # Verify the log directory is writable.
+    if [ ! -w "${log_dir}" ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Log directory '${log_dir}' is not writable." >&2
+        return 1
+    fi
+
+    # Set the global LOG_FILE variable for this script execution.
+    LOG_FILE="${log_dir}/boot-check-$(date '+%Y-%m-%d_%H%M%S').log"
+    
+    # Create the log file immediately and check for success.
+    if ! touch "${LOG_FILE}"; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Could not create log file at '${LOG_FILE}'." >&2
+        LOG_FILE=""
+        return 1
+    fi
+
+    # Call the dedicated file rotation function for the logs.
+    local max_logs=$((SNAPSHOTS * 2))
+    file_rotation "${log_dir}" "boot-check-*.log" "${max_logs}" "${RETENTION_DAYS}"
+
+    return 0
+}
+
+# --- File Rotation Function ---
+# Rotates files based on age (retention days) and count (snapshots).
+#
+# @param {string} dir - The directory containing the files.
+# @param {string} pattern - The file pattern to match (e.g., "*.log").
+# @param {integer} max_files - The maximum number of files to keep by count.
+# @param {integer} retention_days - The maximum age in days for files.
+# @return {integer} 0 for success.
+file_rotation() {
+    local dir="$1"
+    local pattern="$2"
+    local max_files="$3"
+    local retention_days="$4"
+
+    # --- 1. Retention Policy Deletion (by age) ---
+    log_message "INFO: Checking retention policy for pattern '${pattern}' in '${dir}'. Max age: ${retention_days} days."
+    # Use find with -mtime to locate files older than retention_days and delete them.
+    # -mtime +N finds files modified more than N+1 days ago, so +$((retention_days - 1)) is correct.
+    find "${dir}" -maxdepth 1 -type f -name "${pattern}" -mtime "+$((retention_days - 1))" | while read -r old_file; do
+        log_message "INFO: Deleting file due to retention policy (> ${retention_days} days): '${old_file}'"
+        if ! rm -f "${old_file}"; then
+            log_message "WARNING: Failed to delete retention-expired file '${old_file}'."
+        fi
+    done
+
+    # --- 2. Snapshot Count Rotation (by count) ---
+    log_message "INFO: Checking item count for pattern '${pattern}' in '${dir}'. Max files to keep: ${max_files}."
+    
+    local current_file_count
+    current_file_count=$(find "${dir}" -maxdepth 1 -type f -name "${pattern}" | wc -l)
+
+    if (( current_file_count > max_files )); then
+        local num_to_delete=$((current_file_count - max_files))
+        log_message "INFO: Found ${current_file_count} files, which exceeds max of ${max_files}. Deleting the ${num_to_delete} oldest file(s)."
+        
+        # List remaining files by modification time (oldest first) and delete the excess.
+        find "${dir}" -maxdepth 1 -type f -name "${pattern}" -printf '%T@ %p\n' | sort -n | head -n "${num_to_delete}" | cut -d' ' -f2- | while read -r old_file; do
+            log_message "INFO: Deleting oldest item to meet count limit: '${old_file}'"
+            if ! rm -f "${old_file}"; then
+                log_message "WARNING: Failed to delete old item file '${old_file}'."
+            fi
+        done
+    else
+        log_message "INFO: ${current_file_count} file(s) found. No count-based rotation needed for pattern '${pattern}'."
+    fi
+    return 0
+}
+
 # Debug print function
 debug_print() {
     if [ "$DEBUG" = true ]; then
-        echo "DEBUG: $*" >&2
+        log_message "DEBUG: $*"
     fi
 }
 
@@ -103,14 +217,14 @@ print_partition_state() {
         drive_location="/dev/$name"
     fi
     
-    echo "  Drive location: $drive_location"
-    echo "  Current Mountpoint: $mountpoint"
-    echo "  UUID: $uuid"
-    echo "  File type: $fstype"
-    echo "  Current Label: $label"
-    echo "  Drive Size: $size"
-    echo "  Transport Type: $tran"
-    echo ""
+    log_message "  Drive location: $drive_location"
+    log_message "  Current Mountpoint: $mountpoint"
+    log_message "  UUID: $uuid"
+    log_message "  File type: $fstype"
+    log_message "  Current Label: $label"
+    log_message "  Drive Size: $size"
+    log_message "  Transport Type: $tran"
+    log_message ""
 }
 
 # Main function
@@ -139,8 +253,8 @@ initial_test() {
     
     # Check if we have exactly one UNRAID partition
     if [ ${#unraid_partitions[@]} -ne 1 ]; then
-        echo "Error: You have multiple partitions with the label: UNRAID. You must only have one or the system may not boot properly. Please resolve"
-        echo ""
+        log_message "ERROR: You have multiple partitions with the label: UNRAID. You must only have one or the system may not boot properly. Please resolve"
+        log_message ""
         
         for idx in "${!unraid_partitions[@]}"; do
             print_partition_state "${unraid_partitions[$idx]}" "${unraid_indices[$idx]}"
@@ -150,10 +264,20 @@ initial_test() {
     fi
     
     # We have exactly one UNRAID partition
-    echo "The current booted environment is as follows"
-    echo ""
+    log_message "INFO: The current booted environment is as follows"
+    log_message ""
     print_partition_state "${unraid_partitions[0]}" "${unraid_indices[0]}"
 }
 
+# Initialize logging
+if ! setup_logging; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Failed to setup logging. Exiting." >&2
+    exit 1
+fi
+
+log_message "INFO: Starting UNRAID boot partition check script"
+
 # Run the main function
 initial_test
+
+log_message "INFO: UNRAID boot partition check completed successfully"
