@@ -274,57 +274,80 @@ find_and_prepare_clone() {
     debug_print "Boot size: $BOOT_SIZE bytes"
     debug_print "Minimum required size (95%): $min_required_size bytes"
     
-    # Scan for USB drives with LABEL != "UNRAID"
+    # Scan for USB drives by looking at partitions first
     for i in "${!current_drive_state[@]}"; do
         local row="${current_drive_state[$i]}"
         local name=$(get_column_value "$row" "NAME")
-        local tran=$(get_column_value "$row" "TRAN")
         local label=$(get_column_value "$row" "LABEL")
-        local size=$(get_column_value "$row" "SIZE")
         local uuid=$(get_column_value "$row" "UUID")
-        local fstype=$(get_column_value "$row" "FSTYPE")
+        local size=$(get_column_value "$row" "SIZE")
         
-        # If TRAN is empty, try to get it from parent
-        if [[ -z "$tran" ]]; then
-            tran=$(get_tran_type "$i")
-        fi
-        
-        debug_print "Checking device: name='$name' tran='$tran' label='$label' size='$size'"
-        
-        # Check if it's a USB drive (parent device, not partition) and not labeled UNRAID
-        if [[ "$tran" == "usb" ]] && [[ "$label" != "UNRAID" ]] && [[ ! "$name" =~ [0-9]$ ]]; then
-            debug_print "Found USB drive: $name with size $size bytes"
+        # Check if this is a partition (name ends with a number) with a label
+        if [[ "$name" =~ [0-9]$ ]] && [[ -n "$label" ]]; then
+            debug_print "Checking partition: name='$name' label='$label'"
             
-            # Check if size meets minimum requirement
-            if [[ -n "$size" ]] && [[ "$size" =~ ^[0-9]+$ ]] && (( size >= min_required_size )); then
-                log_message "INFO: Qualified USB drive found: /dev/$name"
+            # Skip if label is UNRAID
+            if [[ "$label" == "UNRAID" ]]; then
+                debug_print "Skipping UNRAID partition: $name"
+                continue
+            fi
+            
+            # Extract the parent device name (e.g., sda from sda1, nvme0n1 from nvme0n1p1)
+            local parent_device=$(echo "$name" | sed 's/[0-9]*$//' | sed 's/p$//')
+            
+            debug_print "Parent device for $name: $parent_device"
+            
+            # Find the parent device row to get TRAN and SIZE
+            local parent_row=""
+            local parent_size=""
+            local parent_tran=""
+            
+            for j in "${!current_drive_state[@]}"; do
+                local check_row="${current_drive_state[$j]}"
+                local check_name=$(get_column_value "$check_row" "NAME")
                 
-                # Add to clone_array
-                clone_array+=("$row")
-                
-                # Print partition table information
-                log_message "INFO: Partition table for /dev/$name:"
-                if [[ -n "$uuid" ]] && [[ -e "/dev/disk/by-uuid/$uuid" ]]; then
-                    fdisk -l "/dev/disk/by-uuid/$uuid" 2>&1 | while IFS= read -r line; do
-                        log_message "  $line"
-                    done
-                else
-                    fdisk -l "/dev/$name" 2>&1 | while IFS= read -r line; do
-                        log_message "  $line"
-                    done
+                if [[ "$check_name" == "$parent_device" ]]; then
+                    parent_row="$check_row"
+                    parent_size=$(get_column_value "$check_row" "SIZE")
+                    parent_tran=$(get_column_value "$check_row" "TRAN")
+                    debug_print "Found parent device: $check_name with TRAN=$parent_tran and SIZE=$parent_size"
+                    break
                 fi
+            done
+            
+            # Check if parent is USB
+            if [[ "$parent_tran" != "usb" ]]; then
+                debug_print "Parent device $parent_device is not USB (TRAN=$parent_tran), skipping"
+                continue
+            fi
+            
+            debug_print "Found USB partition: $name with label '$label' on parent $parent_device"
+            
+            # Check if parent device size meets minimum requirement
+            if [[ -n "$parent_size" ]] && [[ "$parent_size" =~ ^[0-9]+$ ]] && (( parent_size >= min_required_size )); then
+                log_message "INFO: Qualified USB drive found: /dev/$parent_device (partition: /dev/$name, label: $label)"
+                
+                # Add parent device row to clone_array
+                clone_array+=("$parent_row")
+                
+                # Print partition table information for parent device
+                log_message "INFO: Partition table for /dev/$parent_device:"
+                fdisk -l "/dev/$parent_device" 2>&1 | while IFS= read -r line; do
+                    log_message "  $line"
+                done
                 
                 # Print disk information
-                log_message "INFO: Disk information for /dev/$name:"
-                log_message "  Name: $name"
-                log_message "  Size: $(convert_bytes_to_human "$size")"
-                log_message "  Transport: $tran"
-                log_message "  UUID: $uuid"
-                log_message "  Filesystem: $fstype"
+                log_message "INFO: Disk information for /dev/$parent_device:"
+                log_message "  Parent Device: $parent_device"
+                log_message "  Partition: $name"
+                log_message "  Partition Label: $label"
+                log_message "  Partition UUID: $uuid"
+                log_message "  Parent Size: $(convert_bytes_to_human "$parent_size")"
+                log_message "  Transport: $parent_tran"
                 log_message ""
             else
-                local drive_size_human=$(convert_bytes_to_human "$size")
-                log_message "INFO: USB Drive /dev/$name is too small to be used as a backup. Size must be 95% or greater of $boot_size_human. Current size: $drive_size_human"
+                local drive_size_human=$(convert_bytes_to_human "$parent_size")
+                log_message "INFO: USB Drive /dev/$parent_device (label: $label) is too small to be used as a backup. Size must be 95% or greater of $boot_size_human. Current size: $drive_size_human"
             fi
         fi
     done
