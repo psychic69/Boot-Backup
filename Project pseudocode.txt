@@ -16,6 +16,45 @@ test:
 
     Current mountpoint is /boot and label UNRAID
 
+fdisk -l /dev/sdh
+fdisk -l /dev/disk/by-uuid/{UUID}
+Disk /dev/sdh: 7.54 GiB, 8095006720 bytes, 15810560 sectors
+Disk model: ATPCGeUSB
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: dos
+Disk identifier: 0xc3072e18
+
+Device     Boot Start      End  Sectors  Size Id Type
+/dev/sdh1         120 15810559 15810440  7.5G  b W95 FAT32
+
+To format partition /dev/sdX1 to FAT32 with the volume label MYUSB:
+
+Bash
+
+mkfs.vfat -F 32 -n MYUSB /dev/sdX1
+-F 32: Specifies the FAT32 filesystem (this is optional as mkfs.vfat usually defaults to FAT32 on modern USB sizes).
+
+-n MYUSB: Sets the Volume Label. The video below provides a guide on fixing and replacing an Unraid USB flash drive, which often involves formatting and partitioning steps.
+
+Remove boot flag just in case:
+DEVICE="/dev/sda"
+PARTITION_NUMBER=1
+
+echo "Removing boot flag from ${DEVICE}${PARTITION_NUMBER}..."
+
+# The '-s' flag makes parted non-interactive (script-friendly)
+# The 'set' subcommand is used to toggle flags (on/off)
+parted -s "$DEVICE" set "$PARTITION_NUMBER" boot off
+
+if [ $? -eq 0 ]; then
+    echo "Successfully removed boot flag from ${DEVICE}${PARTITION_NUMBER}."
+else
+    echo "Error: Failed to remove boot flag."
+fi
+
+To stop backup from accidental boot, ensure EFI root renamed EFI-   (this will still work w/ make_bootable)
 
 PSEUDOCODE:
 
@@ -43,9 +82,30 @@ The labels for the array (current_drive_state) will be the first row from the fi
        b. Send the current row index with LABEL UNRAID to print_partition_state
 
        c.  OK made it here make sure that the current booted UNRAID is at /boot.   If not error out and say  "Error:  Currently Label is UNRAID, however mount point is not /boot: $mountpoint"
+-----------
+         Add:  
+     
+    BOOT_SIZE=$(get_column_value "$boot_row" "SIZE")
+    below the BOOT_MOUNT definition
 
-    4. Scan the drives again and look for partition label = "UNRAID_CLONE"
+
+    4. Scan the drives again from input file (test-lsblk) and look for partition label = "UNRAID_CLONE"
       a.  If it exists jump to function clone_backup{}   If it does not exist jumpt to function find_and_prepare_clone{}
 
-    5.  Funtion find_and_prepare_clone:
+    5.  Funtion find_and_prepare_clone():  (There is no partition with the name UNRAID_CLONE)
+      a. Scan for drives with TRAN="usb" and LABEL != "UNRAID"
+         If a drive is matched:
+           1.  Check to see if the SIZE of the drive (not partition) > 0.95*$BOOT_SIZE
+                if true, add to new array with all values with array name: clone_array
+                  print partition table infor using: fdisk -l /dev/disk/by-uuid/$UUID from array
+                  print disk information /dev/"NAME"  (not partition)
+                  else
+                    Send informational message "USB Drive: $UUID is too small to be used as a backup, size must be 95% or greater of human readable $BOOT_SIZE
+                fi
+        If there are zero drives in the array after scanning, ERROR out and log "There were no qualified USB availible backup drives found.  Please connect a new drive."
+    
+    6. Function clone_backup()
+       Leave as holder--blank for now. 
+  
+
        

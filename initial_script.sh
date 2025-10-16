@@ -2,6 +2,7 @@
 
 # Global variables
 declare -a current_drive_state
+declare -a clone_array
 DEBUG=false
 LOG_FILE=""
 LOG_DIR="/var/log/unraid-boot-check"
@@ -9,6 +10,7 @@ SNAPSHOTS=5
 RETENTION_DAYS=30
 BOOT_UUID=""
 BOOT_MOUNT=""
+BOOT_SIZE=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -261,6 +263,87 @@ print_partition_state() {
     log_message ""
 }
 
+# Function to find and prepare clone drive
+find_and_prepare_clone() {
+    log_message "INFO: No UNRAID_CLONE partition found. Searching for suitable USB drives..."
+    
+    # Calculate minimum required size (95% of boot size)
+    local min_required_size=$(awk "BEGIN {printf \"%.0f\", $BOOT_SIZE * 0.95}")
+    local boot_size_human=$(convert_bytes_to_human "$BOOT_SIZE")
+    
+    debug_print "Boot size: $BOOT_SIZE bytes"
+    debug_print "Minimum required size (95%): $min_required_size bytes"
+    
+    # Scan for USB drives with LABEL != "UNRAID"
+    for i in "${!current_drive_state[@]}"; do
+        local row="${current_drive_state[$i]}"
+        local name=$(get_column_value "$row" "NAME")
+        local tran=$(get_column_value "$row" "TRAN")
+        local label=$(get_column_value "$row" "LABEL")
+        local size=$(get_column_value "$row" "SIZE")
+        local uuid=$(get_column_value "$row" "UUID")
+        local fstype=$(get_column_value "$row" "FSTYPE")
+        
+        # If TRAN is empty, try to get it from parent
+        if [[ -z "$tran" ]]; then
+            tran=$(get_tran_type "$i")
+        fi
+        
+        debug_print "Checking device: name='$name' tran='$tran' label='$label' size='$size'"
+        
+        # Check if it's a USB drive (parent device, not partition) and not labeled UNRAID
+        if [[ "$tran" == "usb" ]] && [[ "$label" != "UNRAID" ]] && [[ ! "$name" =~ [0-9]$ ]]; then
+            debug_print "Found USB drive: $name with size $size bytes"
+            
+            # Check if size meets minimum requirement
+            if [[ -n "$size" ]] && [[ "$size" =~ ^[0-9]+$ ]] && (( size >= min_required_size )); then
+                log_message "INFO: Qualified USB drive found: /dev/$name"
+                
+                # Add to clone_array
+                clone_array+=("$row")
+                
+                # Print partition table information
+                log_message "INFO: Partition table for /dev/$name:"
+                if [[ -n "$uuid" ]] && [[ -e "/dev/disk/by-uuid/$uuid" ]]; then
+                    fdisk -l "/dev/disk/by-uuid/$uuid" 2>&1 | while IFS= read -r line; do
+                        log_message "  $line"
+                    done
+                else
+                    fdisk -l "/dev/$name" 2>&1 | while IFS= read -r line; do
+                        log_message "  $line"
+                    done
+                fi
+                
+                # Print disk information
+                log_message "INFO: Disk information for /dev/$name:"
+                log_message "  Name: $name"
+                log_message "  Size: $(convert_bytes_to_human "$size")"
+                log_message "  Transport: $tran"
+                log_message "  UUID: $uuid"
+                log_message "  Filesystem: $fstype"
+                log_message ""
+            else
+                local drive_size_human=$(convert_bytes_to_human "$size")
+                log_message "INFO: USB Drive /dev/$name is too small to be used as a backup. Size must be 95% or greater of $boot_size_human. Current size: $drive_size_human"
+            fi
+        fi
+    done
+    
+    # Check if we found any qualified drives
+    if [ ${#clone_array[@]} -eq 0 ]; then
+        log_message "ERROR: There were no qualified USB available backup drives found. Please connect a new drive."
+        exit 1
+    fi
+    
+    log_message "INFO: Found ${#clone_array[@]} qualified USB drive(s) for backup."
+}
+
+# Function to perform clone backup
+clone_backup() {
+    log_message "INFO: UNRAID_CLONE partition found. Proceeding with backup..."
+    # TODO: Implement clone backup logic
+}
+
 # Main function
 initial_test() {
     # Load the drive state
@@ -302,6 +385,7 @@ initial_test() {
     local boot_row="${unraid_partitions[0]}"
     BOOT_UUID=$(get_column_value "$boot_row" "UUID")
     BOOT_MOUNT=$(get_column_value "$boot_row" "MOUNTPOINT")
+    BOOT_SIZE=$(get_column_value "$boot_row" "SIZE")
     
     # Validate that BOOT_MOUNT is /boot
     if [[ "$BOOT_MOUNT" != "/boot" ]]; then
@@ -318,6 +402,27 @@ initial_test() {
     
     debug_print "Boot UUID set to: $BOOT_UUID"
     debug_print "Boot mount set to: $BOOT_MOUNT"
+    debug_print "Boot size set to: $BOOT_SIZE bytes"
+    
+    # Step 4: Scan for UNRAID_CLONE partition
+    local clone_found=false
+    for i in "${!current_drive_state[@]}"; do
+        local row="${current_drive_state[$i]}"
+        local label=$(get_column_value "$row" "LABEL")
+        
+        if [[ "$label" == "UNRAID_CLONE" ]]; then
+            clone_found=true
+            debug_print "Found UNRAID_CLONE partition"
+            break
+        fi
+    done
+    
+    # Step 5 & 6: Call appropriate function based on whether clone exists
+    if [ "$clone_found" = true ]; then
+        clone_backup
+    else
+        find_and_prepare_clone
+    fi
 }
 
 # Initialize logging
