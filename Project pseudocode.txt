@@ -9,34 +9,6 @@ This is now bytes.  Will need bytes to gig conversion for human readable.
 backup:  91FC-86D8
 active:  D467-DF06
 
-fatlabel /dev/sdXN "NEW_LABEL"
-
-test:
-    fatlabel /dev/disk/by-uuid/91FC-86D8 "UNRAID_DR"
-
-    Current mountpoint is /boot and label UNRAID
-
-fdisk -l /dev/sdh
-fdisk -l /dev/disk/by-uuid/{UUID}
-Disk /dev/sdh: 7.54 GiB, 8095006720 bytes, 15810560 sectors
-Disk model: ATPCGeUSB
-Units: sectors of 1 * 512 = 512 bytes
-Sector size (logical/physical): 512 bytes / 512 bytes
-I/O size (minimum/optimal): 512 bytes / 512 bytes
-Disklabel type: dos
-Disk identifier: 0xc3072e18
-
-Device     Boot Start      End  Sectors  Size Id Type
-/dev/sdh1         120 15810559 15810440  7.5G  b W95 FAT32
-
-To format partition /dev/sdX1 to FAT32 with the volume label MYUSB:
-
-Bash
-
-mkfs.vfat -F 32 -n MYUSB /dev/sdX1
--F 32: Specifies the FAT32 filesystem (this is optional as mkfs.vfat usually defaults to FAT32 on modern USB sizes).
-
--n MYUSB: Sets the Volume Label. The video below provides a guide on fixing and replacing an Unraid USB flash drive, which often involves formatting and partitioning steps.
 
 Remove boot flag just in case:
 DEVICE="/dev/sda"
@@ -103,6 +75,8 @@ The labels for the array (current_drive_state) will be the first row from the fi
                     Send informational message "USB Drive: $UUID is too small to be used as a backup, size must be 95% or greater of human readable $BOOT_SIZE
                 fi
         If there are zero drives in the array after scanning, ERROR out and log "There were no qualified USB availible backup drives found.  Please connect a new drive."
+
+        b.  OK of the qualified USB drives
     
     6. Function clone_backup()
        Leave as holder--blank for now. 
