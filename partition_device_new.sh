@@ -49,6 +49,6 @@ PARTITION="${DEVICE}1"
 
 echo "Formatting ${PARTITION} as VFAT (FAT32)..."
 # The -n flag sets the volume name (label) of the partition.
-sudo mkfs.vfat -F 32 -n "UNRAID_CLONE" ${PARTITION}
+sudo mkfs.vfat -F 32 -n "UNRAID_DR" ${PARTITION}
 
 echo "✅ Process complete. ${DEVICE} is partitioned, formatted, and labeled 'UNRAID_CLONE'."
