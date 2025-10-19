@@ -175,9 +175,63 @@ debug_print() {
 
 # Function to load the lsblk data
 load_drive_state() {
-    while IFS= read -r line; do
-        current_drive_state+=("$line")
-    done < "./test-lsblk"
+    if [ "$DEBUG" = true ]; then
+        # In debug mode, read from test file
+        log_message "INFO: DEBUG MODE - Loading drive state from test-lsblk file..."
+        
+        if [ ! -f "./test-lsblk" ]; then
+            log_message "ERROR: Test file './test-lsblk' not found"
+            return 1
+        fi
+        
+        while IFS= read -r line; do
+            # Skip empty lines
+            if [[ -n "$line" ]]; then
+                current_drive_state+=("$line")
+                debug_print "Loaded drive state line: $line"
+            fi
+        done < "./test-lsblk"
+        
+        # Check if we loaded any data
+        if [ ${#current_drive_state[@]} -eq 0 ]; then
+            log_message "ERROR: No drive data loaded from test-lsblk file"
+            return 1
+        fi
+        
+        log_message "INFO: DEBUG MODE - Loaded ${#current_drive_state[@]} drive entries from test-lsblk"
+        
+    else
+        # In production mode, run lsblk command
+        log_message "INFO: Loading current drive state from lsblk..."
+        
+        # Run lsblk command and capture output
+        local lsblk_output
+        if ! lsblk_output=$(lsblk -b -P -o NAME,UUID,FSTYPE,SIZE,MOUNTPOINT,LABEL,TRAN 2>&1); then
+            log_message "ERROR: Failed to execute lsblk command"
+            log_message "ERROR: lsblk output: $lsblk_output"
+            return 1
+        fi
+        
+        debug_print "lsblk command executed successfully"
+        
+        # Read output line by line into array
+        while IFS= read -r line; do
+            # Skip empty lines
+            if [[ -n "$line" ]]; then
+                current_drive_state+=("$line")
+            fi
+        done <<< "$lsblk_output"
+        
+        # Check if we loaded any data
+        if [ ${#current_drive_state[@]} -eq 0 ]; then
+            log_message "ERROR: No drive data loaded from lsblk"
+            return 1
+        fi
+        
+        log_message "INFO: Loaded ${#current_drive_state[@]} drive entries from lsblk"
+    fi
+    
+    return 0
 }
 
 # Function to get column value from a key=value pair line
