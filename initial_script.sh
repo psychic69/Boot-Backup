@@ -713,18 +713,46 @@ initial_test() {
     debug_print "Boot mount set to: $BOOT_MOUNT"
     debug_print "Boot size set to: $BOOT_SIZE bytes"
     
-    # Step 4: Scan for UNRAID_DR partition
-    local clone_found=false
-    for i in "${!current_drive_state[@]}"; do
-        local row="${current_drive_state[$i]}"
-        local label=$(get_column_value "$row" "LABEL")
+    # Step 4: Scan for UNRAID_DR partition.  There must be one and only one, else the code will not be able to find the proper target. 
+local clone_found=false
+local -a unraid_dr_partitions
+local -a unraid_dr_devices
+
+for i in "${!current_drive_state[@]}"; do
+    local row="${current_drive_state[$i]}"
+    local label=$(get_column_value "$row" "LABEL")
+    local name=$(get_column_value "$row" "NAME")
+    
+    if [[ "$label" == "UNRAID_DR" ]]; then
+        debug_print "Found UNRAID_DR partition: $name"
+        unraid_dr_partitions+=("$row")
         
-        if [[ "$label" == "UNRAID_DR" ]]; then
-            clone_found=true
-            debug_print "Found UNRAID_DR partition"
-            break
+        # Add device path to list
+        if [[ "$name" =~ ^(sd[a-z][0-9]+|nvme[0-9]+n[0-9]+p[0-9]+) ]]; then
+            unraid_dr_devices+=("/dev/$name")
+        else
+            unraid_dr_devices+=("$name")
         fi
+    fi
+done
+
+# Check if we found exactly one UNRAID_DR partition
+if [ ${#unraid_dr_partitions[@]} -gt 1 ]; then
+    log_message "ERROR: Multiple partitions with the label UNRAID_DR found. You must have only one."
+    log_message "ERROR: Please remove the UNRAID_DR label from all but one of the following devices:"
+    log_message ""
+    for device in "${unraid_dr_devices[@]}"; do
+        log_message "  - $device"
     done
+    log_message ""
+    log_message "ERROR: Exiting script. Please resolve the duplicate UNRAID_DR labels."
+    exit 1
+elif [ ${#unraid_dr_partitions[@]} -eq 1 ]; then
+    clone_found=true
+    debug_print "Found exactly one UNRAID_DR partition"
+else
+    debug_print "No UNRAID_DR partition found"
+fi
     
     # Step 5 & 6: Call appropriate function based on whether clone exists
     if [ "$clone_found" = true ]; then
