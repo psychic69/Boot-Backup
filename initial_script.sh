@@ -265,7 +265,7 @@ print_partition_state() {
 
 # Function to find and prepare clone drive
 find_and_prepare_clone() {
-    log_message "INFO: No UNRAID_CLONE partition found. Searching for suitable USB drives..."
+    log_message "INFO: No UNRAID_DR partition found. Searching for suitable USB drives..."
     
     # Calculate minimum required size (95% of boot size)
     local min_required_size=$(awk "BEGIN {printf \"%.0f\", $BOOT_SIZE * 0.95}")
@@ -363,7 +363,7 @@ find_and_prepare_clone() {
 
 # Function to perform clone backup
 clone_backup() {
-    log_message "INFO: UNRAID_CLONE partition found. Proceeding with backup..."
+    log_message "INFO: UNRAID_DR partition found. Proceeding with backup..."
     # TODO: Implement clone backup logic
 }
 
@@ -427,15 +427,15 @@ initial_test() {
     debug_print "Boot mount set to: $BOOT_MOUNT"
     debug_print "Boot size set to: $BOOT_SIZE bytes"
     
-    # Step 4: Scan for UNRAID_CLONE partition
+    # Step 4: Scan for UNRAID_DR partition
     local clone_found=false
     for i in "${!current_drive_state[@]}"; do
         local row="${current_drive_state[$i]}"
         local label=$(get_column_value "$row" "LABEL")
         
-        if [[ "$label" == "UNRAID_CLONE" ]]; then
+        if [[ "$label" == "UNRAID_DR" ]]; then
             clone_found=true
-            debug_print "Found UNRAID_CLONE partition"
+            debug_print "Found UNRAID_DR partition"
             break
         fi
     done

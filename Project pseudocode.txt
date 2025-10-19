@@ -64,7 +64,7 @@ The labels for the array (current_drive_state) will be the first row from the fi
     4. Scan the drives again from input file (test-lsblk) and look for partition label = "UNRAID_CLONE"
       a.  If it exists jump to function clone_backup{}   If it does not exist jumpt to function find_and_prepare_clone{}
 
-    5.  Funtion find_and_prepare_clone():  (There is no partition with the name UNRAID_CLONE)
+    5.  Function find_and_prepare_clone():  (There is no partition with the name UNRAID_CLONE)
       a. Scan for drives with TRAN="usb" and LABEL != "UNRAID"
          If a drive is matched:
            1.  Check to see if the SIZE of the drive (not partition) > 0.95*$BOOT_SIZE
@@ -77,8 +77,23 @@ The labels for the array (current_drive_state) will be the first row from the fi
         If there are zero drives in the array after scanning, ERROR out and log "There were no qualified USB availible backup drives found.  Please connect a new drive."
 
         b.  OK of the qualified USB drives
+
+        c. Provide a list of the qualified USB drives in a menu using the dialog "Here are the qualified drive(s) to format to be the backup USB for the /boot system.  Choose the drive you would like.  Please type in the device name from the list"
+          In the list for each drive(s) have Device Name: {device name}, Model: {Model}, Size: Size (bytes, human)
+          The user must enter in the device name.  (ie sdi)
+          Once the user enters in the device name check to see it matches a device in the qualifed list.  If they mess it up give them one more chance to enter the device name in correctly.  If not error out of the script
+          Put up the warning "Be aware the device /dev/{DEVICE} will be formatted and wiped.  Are you sure you want to do this?  If so type FORMAT in all capitals"
+          Have a dialog and see if the user enters "FORMAT".  If not give one more chance to enter correctly and if not exist from the script.
+
+        d. Execute partition_device_new function and send in the /dev/{DEVICE} as the flag for the function.
+        e. set global variables as follows:
+            CLONE_DEVICE=/dev/{device} of the chosen qualified drive
+        f. execute function clone_backup() and send as $1 $CLONE_DEVICE
+        
+
     
-    6. Function clone_backup()
+    
+    6. Function clone_backup{}
        Leave as holder--blank for now. 
   
 
