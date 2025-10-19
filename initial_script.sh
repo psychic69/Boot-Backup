@@ -263,6 +263,119 @@ print_partition_state() {
     log_message ""
 }
 
+# --- Partition Device Function ---
+# Partitions and formats a device as FAT32 with label UNRAID_DR
+# If drive > 64GB, creates a 64GB partition. Otherwise uses entire drive.
+#
+# @param {string} device - The device to partition (e.g., /dev/sdh)
+# @return {integer} 0 for success, 1 for failure.
+partition_device_new() {
+    local device="$1"
+    
+    # --- INPUT VALIDATION ---
+    if [ -z "${device}" ]; then
+        log_message "ERROR: No device specified for partitioning."
+        log_message "Usage: partition_device_new /dev/sdX"
+        return 1
+    fi
+    
+    debug_print "partition_device_new called with device: ${device}"
+    
+    if [ ! -b "${device}" ]; then
+        log_message "ERROR: Device ${device} is not a valid block device."
+        log_message "Please use a command like 'lsblk' to verify the device name."
+        return 1
+    fi
+    
+    debug_print "Device ${device} validated as block device"
+    
+    # --- CHECK DRIVE SIZE & PREPARE PARTITION DEFINITION ---
+    log_message "INFO: Checking drive size for ${device}..."
+    
+    # Get the total size of the drive in bytes.
+    local drive_size_bytes=$(lsblk -b -n -d -o SIZE ${device})
+    
+    if [ -z "${drive_size_bytes}" ]; then
+        log_message "ERROR: Could not determine size of ${device}"
+        return 1
+    fi
+    
+    debug_print "Drive size in bytes: ${drive_size_bytes}"
+    
+    # Define our maximum size: 64 GiB in bytes (64 * 1024^3).
+    local max_size_bytes=$((64 * 1024 * 1024 * 1024))
+    
+    debug_print "Maximum partition size: ${max_size_bytes} bytes (64GB)"
+    
+    # Variable to hold the partition definition for sfdisk.
+    local sfdisk_partition_def=""
+    
+    if [ "${drive_size_bytes}" -gt "${max_size_bytes}" ]; then
+        log_message "INFO: Drive is larger than 64GB. Creating a 64GB partition."
+        # Define a partition of 64GB with type 'b' (W95 FAT32).
+        sfdisk_partition_def="size=64G, type=b"
+    else
+        log_message "INFO: Drive is 64GB or smaller. Using the entire drive."
+        # Define a single partition of type 'b' using all available space.
+        sfdisk_partition_def="type=b"
+    fi
+    
+    debug_print "Partition definition: ${sfdisk_partition_def}"
+    
+    # --- PARTITION THE DRIVE ---
+    log_message "INFO: Wiping existing signatures and creating new partition on ${device}..."
+    
+    # First, wipe any existing filesystem or partition table signatures.
+    debug_print "Running wipefs -a ${device}"
+    if ! wipefs -a "${device}" 2>&1 | while IFS= read -r line; do debug_print "wipefs: $line"; done; then
+        log_message "WARNING: wipefs encountered issues, but continuing..."
+    fi
+    
+    # Use sfdisk to create the MBR partition table and partition in one step.
+    debug_print "Running sfdisk ${device} with definition: ${sfdisk_partition_def}"
+    if ! echo "${sfdisk_partition_def}" | sfdisk "${device}" 2>&1 | while IFS= read -r line; do debug_print "sfdisk: $line"; done; then
+        log_message "ERROR: Failed to partition ${device} with sfdisk"
+        return 1
+    fi
+    
+    log_message "INFO: Partition table created successfully"
+    
+    # Use partprobe to make sure the kernel recognizes the new partition table.
+    debug_print "Running partprobe ${device}"
+    if ! partprobe "${device}" 2>&1 | while IFS= read -r line; do debug_print "partprobe: $line"; done; then
+        log_message "WARNING: partprobe encountered issues, but continuing..."
+    fi
+    
+    # Short pause to ensure the device node is created.
+    debug_print "Sleeping 2 seconds to allow device node creation"
+    sleep 2
+    
+    # --- FORMAT THE PARTITION ---
+    # The new partition will be the device name followed by the number '1'.
+    local partition="${device}1"
+    
+    debug_print "Partition to format: ${partition}"
+    
+    if [ ! -b "${partition}" ]; then
+        log_message "ERROR: Partition ${partition} was not created successfully"
+        return 1
+    fi
+    
+    log_message "INFO: Formatting ${partition} as VFAT (FAT32)..."
+    
+    # The -n flag sets the volume name (label) to UNRAID_DR.
+    debug_print "Running mkfs.vfat -F 32 -n UNRAID_DR ${partition}"
+    if ! mkfs.vfat -F 32 -n "UNRAID_DR" ${partition} 2>&1 | while IFS= read -r line; do debug_print "mkfs.vfat: $line"; done; then
+        log_message "ERROR: Failed to format ${partition} as VFAT"
+        return 1
+    fi
+    
+    log_message "INFO: Process complete. ${device} is partitioned, formatted, and labeled 'UNRAID_DR'."
+    
+    return 0
+}
+
+# Function to find and prepare clone drive
 # Function to find and prepare clone drive
 find_and_prepare_clone() {
     log_message "INFO: No UNRAID_DR partition found. Searching for suitable USB drives..."
@@ -273,6 +386,11 @@ find_and_prepare_clone() {
     
     debug_print "Boot size: $BOOT_SIZE bytes"
     debug_print "Minimum required size (95%): $min_required_size bytes"
+    
+    # Arrays to store qualified drive information
+    declare -a qualified_devices
+    declare -a qualified_models
+    declare -a qualified_sizes
     
     # Scan for USB drives by looking at partitions first
     for i in "${!current_drive_state[@]}"; do
@@ -330,6 +448,17 @@ find_and_prepare_clone() {
                 # Add parent device row to clone_array
                 clone_array+=("$parent_row")
                 
+                # Get model information from lsblk
+                local model=$(lsblk -n -d -o MODEL "/dev/$parent_device" 2>/dev/null | xargs)
+                if [[ -z "$model" ]]; then
+                    model="Unknown"
+                fi
+                
+                # Store qualified drive information
+                qualified_devices+=("$parent_device")
+                qualified_models+=("$model")
+                qualified_sizes+=("$parent_size")
+                
                 # Print partition table information for parent device
                 log_message "INFO: Partition table for /dev/$parent_device:"
                 fdisk -l "/dev/$parent_device" 2>&1 | while IFS= read -r line; do
@@ -339,6 +468,7 @@ find_and_prepare_clone() {
                 # Print disk information
                 log_message "INFO: Disk information for /dev/$parent_device:"
                 log_message "  Parent Device: $parent_device"
+                log_message "  Model: $model"
                 log_message "  Partition: $name"
                 log_message "  Partition Label: $label"
                 log_message "  Partition UUID: $uuid"
@@ -358,7 +488,109 @@ find_and_prepare_clone() {
         exit 1
     fi
     
-    log_message "INFO: Found ${#clone_array[@]} qualified USB drive(s) for backup."
+    log_message "INFO: Found ${#qualified_devices[@]} qualified USB drive(s) for backup."
+    log_message ""
+    
+    # Display menu of qualified drives
+    log_message "=========================================="
+    log_message "Here are the qualified drive(s) to format to be the backup USB for the /boot system."
+    log_message "Choose the drive you would like. Please type in the device name from the list:"
+    log_message "=========================================="
+    log_message ""
+    
+    for i in "${!qualified_devices[@]}"; do
+        local size_human=$(convert_bytes_to_human "${qualified_sizes[$i]}")
+        log_message "  Device Name: ${qualified_devices[$i]}"
+        log_message "  Model: ${qualified_models[$i]}"
+        log_message "  Size: $size_human"
+        log_message ""
+    done
+    
+    # Prompt user for device selection (two attempts)
+    local selected_device=""
+    local attempt=0
+    local max_attempts=2
+    
+    while [ $attempt -lt $max_attempts ]; do
+        echo -n "Enter device name (e.g., sdh): "
+        read selected_device
+        
+        debug_print "User entered device: '$selected_device'"
+        
+        # Check if the entered device is in the qualified list
+        local device_found=false
+        for device in "${qualified_devices[@]}"; do
+            if [[ "$device" == "$selected_device" ]]; then
+                device_found=true
+                break
+            fi
+        done
+        
+        if [ "$device_found" = true ]; then
+            log_message "INFO: Device $selected_device selected."
+            break
+        else
+            ((attempt++))
+            if [ $attempt -lt $max_attempts ]; then
+                log_message "ERROR: Device '$selected_device' is not in the qualified list. Please try again."
+            else
+                log_message "ERROR: Device '$selected_device' is not in the qualified list. Maximum attempts reached."
+                log_message "ERROR: Exiting script."
+                exit 1
+            fi
+        fi
+    done
+    
+    log_message ""
+    log_message "=========================================="
+    log_message "WARNING: Be aware the device /dev/$selected_device will be formatted and wiped."
+    log_message "WARNING: All data on this device will be permanently lost!"
+    log_message "=========================================="
+    log_message "Are you sure you want to do this? If so, type FORMAT in all capitals:"
+    log_message ""
+    
+    # Prompt user for confirmation (two attempts)
+    local confirmation=""
+    attempt=0
+    
+    while [ $attempt -lt $max_attempts ]; do
+        echo -n "Type FORMAT to confirm: "
+        read confirmation
+        
+        debug_print "User entered confirmation: '$confirmation'"
+        
+        if [[ "$confirmation" == "FORMAT" ]]; then
+            log_message "INFO: Confirmation received. Proceeding with formatting."
+            break
+        else
+            ((attempt++))
+            if [ $attempt -lt $max_attempts ]; then
+                log_message "ERROR: Incorrect confirmation. Please type FORMAT in all capitals."
+            else
+                log_message "ERROR: Incorrect confirmation. Maximum attempts reached."
+                log_message "ERROR: Exiting script."
+                exit 1
+            fi
+        fi
+    done
+    
+    log_message ""
+    
+    # Execute partition_device_new function
+    log_message "INFO: Starting partitioning and formatting of /dev/$selected_device..."
+    if ! partition_device_new "/dev/$selected_device"; then
+        log_message "FATAL: Failed to partition and format /dev/$selected_device"
+        exit 1
+    fi
+    
+    # Set global variable
+    CLONE_DEVICE="/dev/$selected_device"
+    log_message "INFO: CLONE_DEVICE set to: $CLONE_DEVICE"
+    debug_print "Global CLONE_DEVICE: $CLONE_DEVICE"
+    
+    # Execute clone_backup function
+    log_message "INFO: Executing clone_backup with device: $CLONE_DEVICE"
+    clone_backup "$CLONE_DEVICE"
 }
 
 # Function to perform clone backup
