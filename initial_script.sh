@@ -690,13 +690,17 @@ clone_backup() {
         local mount_options=$(findmnt -n -o OPTIONS "$clone_source" 2>/dev/null)
         debug_print "Mount options: $mount_options"
         
-        if [[ "$mount_options" == *"rw"* ]] && [[ "$mount_options" != *"ro"* ]]; then
+        # Extract first option to check if it's rw or ro
+        local first_option=$(echo "$mount_options" | cut -d',' -f1)
+        debug_print "First mount option: $first_option"
+        
+        if [[ "$first_option" == "rw" ]]; then
             log_message "INFO: $clone_source is mounted read/write"
             CLONE_MP="$current_mount_point"
             clone_mounted_already="TRUE"
             debug_print "Using existing mount point: $CLONE_MP"
         else
-            log_message "WARNING: $clone_source is mounted read-only. Unmounting..."
+            log_message "WARNING: $clone_source is mounted read-only (first option: $first_option). Unmounting..."
             if ! umount "$clone_source" 2>&1 | while IFS= read -r line; do debug_print "umount: $line"; done; then
                 log_message "ERROR: Failed to unmount $clone_source, attempting force unmount..."
                 if ! umount -f "$clone_source" 2>&1 | while IFS= read -r line; do debug_print "umount -f: $line"; done; then
