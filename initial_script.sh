@@ -12,6 +12,7 @@ BOOT_UUID=""
 BOOT_MOUNT=""
 BOOT_SIZE=""
 CLONE_DEVICE=""
+CLONE_MP="/mnt/disks/backup-temp"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -654,8 +655,247 @@ find_and_prepare_clone() {
 
 # Function to perform clone backup
 clone_backup() {
-    log_message "INFO: UNRAID_DR partition found. Proceeding with backup..."
-    # TODO: Implement clone backup logic
+    local clone_device="$1"
+    
+    if [ -z "$clone_device" ]; then
+        log_message "ERROR: No clone device provided to clone_backup function"
+        return 1
+    fi
+    
+    log_message "INFO: Starting clone backup process for device: $clone_device"
+    debug_print "clone_backup called with device: $clone_device"
+    
+    # Set local clone_source - append partition 1 to device
+    local clone_source="${clone_device}1"
+    debug_print "Clone source partition set to: $clone_source"
+    
+    if [ ! -b "$clone_source" ]; then
+        log_message "ERROR: Clone source partition $clone_source does not exist as a block device"
+        return 1
+    fi
+    
+    log_message "INFO: Clone source partition: $clone_source"
+    
+    # --- a. Check if clone_source is mounted ---
+    local clone_mounted_already="FALSE"
+    local current_mount_point=""
+    
+    # Check if device is already mounted
+    current_mount_point=$(findmnt -n -o TARGET "$clone_source" 2>/dev/null)
+    
+    if [ -n "$current_mount_point" ]; then
+        log_message "INFO: $clone_source is already mounted at: $current_mount_point"
+        
+        # Check if mounted read/write
+        local mount_options=$(findmnt -n -o OPTIONS "$clone_source" 2>/dev/null)
+        debug_print "Mount options: $mount_options"
+        
+        if [[ "$mount_options" == *"rw"* ]] && [[ "$mount_options" != *"ro"* ]]; then
+            log_message "INFO: $clone_source is mounted read/write"
+            CLONE_MP="$current_mount_point"
+            clone_mounted_already="TRUE"
+            debug_print "Using existing mount point: $CLONE_MP"
+        else
+            log_message "WARNING: $clone_source is mounted read-only. Unmounting..."
+            if ! umount "$clone_source" 2>&1 | while IFS= read -r line; do debug_print "umount: $line"; done; then
+                log_message "ERROR: Failed to unmount $clone_source, attempting force unmount..."
+                if ! umount -f "$clone_source" 2>&1 | while IFS= read -r line; do debug_print "umount -f: $line"; done; then
+                    log_message "ERROR: Failed to force unmount $clone_source"
+                    return 1
+                fi
+            fi
+            log_message "INFO: Successfully unmounted $clone_source"
+        fi
+    fi
+    
+    # Mount if not already mounted read/write
+    if [ "$clone_mounted_already" != "TRUE" ]; then
+        log_message "INFO: Mounting $clone_source at $CLONE_MP..."
+        
+        # Create mount point directory if it doesn't exist
+        if [ ! -d "$CLONE_MP" ]; then
+            debug_print "Creating mount point directory: $CLONE_MP"
+            if ! mkdir -p "$CLONE_MP"; then
+                log_message "ERROR: Failed to create mount point directory: $CLONE_MP"
+                return 1
+            fi
+        fi
+        
+        # Test if mount point is writable
+        if [ ! -w "$CLONE_MP" ]; then
+            log_message "ERROR: Mount point directory $CLONE_MP is not writable"
+            return 1
+        fi
+        
+        debug_print "Mount point directory verified: $CLONE_MP"
+        
+        # Mount the device
+        if ! mount "$clone_source" "$CLONE_MP" 2>&1 | while IFS= read -r line; do debug_print "mount: $line"; done; then
+            log_message "ERROR: Failed to mount $clone_source at $CLONE_MP"
+            return 1
+        fi
+        
+        log_message "INFO: Successfully mounted $clone_source at $CLONE_MP"
+        
+        # Verify mount is read/write
+        local mount_options=$(findmnt -n -o OPTIONS "$clone_source" 2>/dev/null)
+        if [[ "$mount_options" != *"rw"* ]] || [[ "$mount_options" == *"ro"* ]]; then
+            log_message "ERROR: Device mounted but not read/write. Mount options: $mount_options"
+            umount "$CLONE_MP"
+            return 1
+        fi
+        
+        log_message "INFO: Mount verified as read/write"
+    fi
+    
+    # --- b. Double check /boot is mounted ---
+    log_message "INFO: Verifying /boot is mounted..."
+    
+    if ! mountpoint -q /boot; then
+        log_message "ERROR: /boot is not mounted"
+        if [ "$clone_mounted_already" != "TRUE" ]; then
+            umount "$CLONE_MP"
+        fi
+        return 1
+    fi
+    
+    log_message "INFO: /boot is correctly mounted"
+    
+    # --- c. Rsync files from /boot to CLONE_MP ---
+    log_message "INFO: Starting rsync backup from /boot/ to $CLONE_MP/"
+    
+    local rsync_cmd="rsync -avh"
+    
+    # Add --dry-run if debug mode is enabled
+    if [ "$DEBUG" = true ]; then
+        rsync_cmd="$rsync_cmd --dry-run"
+        log_message "INFO: DEBUG MODE - Running rsync with --dry-run (no actual changes)"
+    fi
+    
+    rsync_cmd="$rsync_cmd /boot/ $CLONE_MP/"
+    
+    debug_print "Rsync command: $rsync_cmd"
+    
+    log_message "INFO: Executing: $rsync_cmd"
+    if ! eval "$rsync_cmd" 2>&1 | while IFS= read -r line; do log_message "  rsync: $line"; done; then
+        log_message "ERROR: Rsync backup failed"
+        if [ "$clone_mounted_already" != "TRUE" ]; then
+            umount "$CLONE_MP"
+        fi
+        return 1
+    fi
+    
+    log_message "INFO: Rsync backup completed successfully"
+    
+    # --- d. Delete old BACKUP-* files ---
+    log_message "INFO: Checking for old BACKUP-* marker files in $CLONE_MP..."
+    
+    local backup_files_found=false
+    while IFS= read -r backup_file; do
+        if [ -n "$backup_file" ]; then
+            backup_files_found=true
+            log_message "INFO: Deleting old backup marker: $backup_file"
+            debug_print "Removing file: $backup_file"
+            if [ "$DEBUG" != true ]; then
+                rm -f "$backup_file"
+            else
+                log_message "INFO: DEBUG MODE - Would delete: $backup_file"
+            fi
+        fi
+    done < <(find "$CLONE_MP" -maxdepth 1 -type f -name "BACKUP-*" 2>/dev/null)
+    
+    if [ "$backup_files_found" = false ]; then
+        log_message "INFO: No old BACKUP-* marker files found"
+    fi
+    
+    # --- e. Create new BACKUP-* timestamp file ---
+    local timestamp=$(date '+%m-%d-%Y-%H-%M')
+    local backup_marker="$CLONE_MP/BACKUP-$timestamp"
+    
+    log_message "INFO: Creating backup marker file: BACKUP-$timestamp"
+    debug_print "Touch file: $backup_marker"
+    
+    if [ "$DEBUG" != true ]; then
+        if ! touch "$backup_marker"; then
+            log_message "ERROR: Failed to create backup marker file: $backup_marker"
+            if [ "$clone_mounted_already" != "TRUE" ]; then
+                umount "$CLONE_MP"
+            fi
+            return 1
+        fi
+    else
+        log_message "INFO: DEBUG MODE - Would create: $backup_marker"
+    fi
+    
+    log_message "INFO: Backup marker created successfully"
+    
+    # --- f. Disable EFI boot ---
+    log_message "INFO: Disabling EFI boot to prevent accidental boot from backup..."
+    
+    local efi_dir="$CLONE_MP/EFI"
+    local efi_disabled_dir="$CLONE_MP/EFI-"
+    
+    if [ -d "$efi_dir" ]; then
+        log_message "INFO: Found EFI directory, renaming to EFI-"
+        debug_print "Moving $efi_dir to $efi_disabled_dir"
+        
+        if [ "$DEBUG" != true ]; then
+            # Remove EFI- if it already exists
+            if [ -d "$efi_disabled_dir" ]; then
+                debug_print "Removing existing EFI- directory"
+                rm -rf "$efi_disabled_dir"
+            fi
+            
+            if ! mv "$efi_dir" "$efi_disabled_dir"; then
+                log_message "ERROR: Failed to rename EFI directory"
+                if [ "$clone_mounted_already" != "TRUE" ]; then
+                    umount "$CLONE_MP"
+                fi
+                return 1
+            fi
+            
+            # Verify the move was successful
+            if [ -d "$efi_disabled_dir" ] && [ ! -d "$efi_dir" ]; then
+                log_message "INFO: EFI directory successfully renamed to EFI-"
+            else
+                log_message "ERROR: EFI directory rename verification failed"
+                return 1
+            fi
+        else
+            log_message "INFO: DEBUG MODE - Would rename $efi_dir to $efi_disabled_dir"
+        fi
+    else
+        log_message "INFO: No EFI directory found, skipping EFI disable step"
+    fi
+    
+    # --- g. Unmount if we mounted it ---
+    if [ "$clone_mounted_already" != "TRUE" ]; then
+        log_message "INFO: Unmounting $clone_source from $CLONE_MP..."
+        debug_print "Unmounting: $clone_source"
+        
+        if [ "$DEBUG" != true ]; then
+            if ! umount "$CLONE_MP" 2>&1 | while IFS= read -r line; do debug_print "umount: $line"; done; then
+                log_message "ERROR: Failed to unmount $clone_source"
+                return 1
+            fi
+            
+            # Verify unmount
+            if mountpoint -q "$CLONE_MP"; then
+                log_message "ERROR: Device still appears to be mounted after unmount attempt"
+                return 1
+            fi
+            
+            log_message "INFO: Successfully unmounted $clone_source"
+        else
+            log_message "INFO: DEBUG MODE - Would unmount $clone_source"
+        fi
+    else
+        log_message "INFO: Leaving $clone_source mounted (was already mounted before backup)"
+    fi
+    
+    log_message "INFO: Clone backup process completed successfully"
+    
+    return 0
 }
 
 # Main function

@@ -102,8 +102,19 @@ The labels for the array (current_drive_state) will be the first row from the fi
 
     
     
-    6. Function clone_backup{}
-       Leave as holder--blank for now. 
+    6. Function clone_backup{$1}
+      CLONE DEVICE sent from $1 in clone_backup.
+      set local clone_source = $CLONE_DEVICE with 1(partition one) appended  so /dev/sda now is /dev/sda1  (the first partition)
+
+      a. Check to see if clone_source is mounted in the system, and if not mount
+         If yes check to see if it is mounted read/write. Set CLONE_MP to that mounted directory.  If it is not force unmount if necessary.  Set local clone_mounted_already="TRUE"
+         If no mount $clone_source at global CLONE_MP.  If directory tree doesnt exist create and test.  Also check to see if mount is read/write
+      b.  OK, USB clone mounted correctly, double check /boot is mounted.
+      c.  Using the rsync command, delta copy the files from boot to the CLONE_MP like rsync -avh  /boot/ $CLONE_MP/  <-- Make sure trailing slashes there. If the -debug flag is set, add --dry-run to rsync command
+      d.  Once complete and successful, check in the base of $CLONE_MP for any files with BACKUP-* and delete
+      e.  touch a file in the root of $CLONE_MP BACKUP-'date +%m-%d-%Y-%H-%M'
+      f.  Disable EFI boot by accident mv $CLONE_MP/EFI to $CLONE_MP/EFI-.   This will be adherent to make bootable if it is run outside this. Check to see if it is done correctly
+      g.  If clone_mounted_already, leave mounted, else unmount (and check) clone_source
   
 
        
