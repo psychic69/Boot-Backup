@@ -11,6 +11,7 @@ RETENTION_DAYS=30
 BOOT_UUID=""
 BOOT_MOUNT=""
 BOOT_SIZE=""
+CLONE_DEVICE=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -19,9 +20,13 @@ while [[ $# -gt 0 ]]; do
             DEBUG=true
             shift
             ;;
+        -lsblk)
+            USE_TEST_FILE=true
+            shift
+            ;;
         *)
             echo "Unknown option: $1"
-            echo "Usage: $0 [-debug]"
+            echo "Usage: $0 [-debug] [-lsblk]"
             exit 1
             ;;
     esac
@@ -173,11 +178,11 @@ debug_print() {
     fi
 }
 
-# Function to load the lsblk data
+# Function to load the lsblk data, or from test-lsblk file for unit testing
 load_drive_state() {
-    if [ "$DEBUG" = true ]; then
-        # In debug mode, read from test file
-        log_message "INFO: DEBUG MODE - Loading drive state from test-lsblk file..."
+    if [ "$USE_TEST_FILE" = true ]; then
+        # Use test file when -lsblk flag is set
+        log_message "INFO: Using test-lsblk file for drive state (synthetic testing mode)..."
         
         if [ ! -f "./test-lsblk" ]; then
             log_message "ERROR: Test file './test-lsblk' not found"
@@ -198,7 +203,7 @@ load_drive_state() {
             return 1
         fi
         
-        log_message "INFO: DEBUG MODE - Loaded ${#current_drive_state[@]} drive entries from test-lsblk"
+        log_message "INFO: Loaded ${#current_drive_state[@]} drive entries from test-lsblk file"
         
     else
         # In production mode, run lsblk command
