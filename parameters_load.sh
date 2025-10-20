@@ -1,3 +1,11 @@
+#!/bin/bash
+
+PARAMETER_FILE="./parameter.ini"
+LOG_DIR=""
+SNAPSHOTS=""
+RETENTION_DAYS=""
+CLONE_MP=""
+
 # --- Load Parameters Function ---
 # Loads configuration parameters from parameter.ini file
 #
@@ -50,6 +58,9 @@ load_parameters() {
             CLONE_MP)
                 CLONE_MP="$value"
                 echo "$(date '+%Y-%m-%d %H:%M:%S') - DEBUG: Set CLONE_MP='$CLONE_MP'" >&2
+                ;;
+            *)
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - DEBUG: Unknown key '$key' - skipping" >&2
                 ;;
         esac
     done < "$PARAMETER_FILE"
@@ -120,3 +131,24 @@ load_parameters() {
     
     return 0
 }
+
+# Main execution
+echo "=========================================="
+echo "Parameter File Loader Test"
+echo "=========================================="
+echo ""
+
+if load_parameters; then
+    echo ""
+    echo "SUCCESS: Parameters loaded correctly"
+    echo ""
+    echo "Final Values:"
+    echo "  LOG_DIR = $LOG_DIR"
+    echo "  SNAPSHOTS = $SNAPSHOTS"
+    echo "  RETENTION_DAYS = $RETENTION_DAYS"
+    echo "  CLONE_MP = $CLONE_MP"
+else
+    echo ""
+    echo "FAILED: Could not load parameters"
+    exit 1
+fi
