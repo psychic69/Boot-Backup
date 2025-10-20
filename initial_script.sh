@@ -12,7 +12,7 @@ RETENTION_DAYS=""
 BOOT_SIZE=""
 CLONE_DEVICE=""
 CLONE_MP=""
-PARAMETER_FILE="./parameter.ini"
+PARAMETER_FILE="parameter.ini"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -39,6 +39,7 @@ done
 # @uses global PARAMETER_FILE
 # @uses global LOG_DIR, SNAPSHOTS, RETENTION_DAYS, CLONE_MP
 # @return {integer} 0 for success, 1 for failure.
+
 load_parameters() {
     if [ ! -f "$PARAMETER_FILE" ]; then
         echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Parameter file '$PARAMETER_FILE' not found." >&2
@@ -55,9 +56,13 @@ load_parameters() {
         # Skip empty lines and comments
         [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
         
-        # Trim whitespace
+        # Trim whitespace from key
         key=$(echo "$key" | xargs)
+        
+        # Trim whitespace and remove quotes from value
         value=$(echo "$value" | xargs)
+        value="${value%\"}"  # Remove trailing quote
+        value="${value#\"}"  # Remove leading quote
         
         case "$key" in
             LOG_DIR)
