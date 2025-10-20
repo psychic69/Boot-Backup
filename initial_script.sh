@@ -887,11 +887,11 @@ clone_backup() {
     # --- c. Rsync files from /boot to CLONE_MP ---
     log_message "INFO: Starting rsync backup from /boot/ to $CLONE_MP/"
     
-    local rsync_cmd="rsync -avh"
-    
+    local rsync_cmd="rsync -ah"
+
     # Add --dry-run if debug mode is enabled
     if [ "$DEBUG" = true ]; then
-        rsync_cmd="$rsync_cmd --dry-run"
+        rsync_cmd="$rsync_cmd -v --dry-run"
         log_message "INFO: DEBUG MODE - Running rsync with --dry-run (no actual changes)"
     fi
     
