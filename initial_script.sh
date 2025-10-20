@@ -760,11 +760,26 @@ else
 fi
     
     # Step 5 & 6: Call appropriate function based on whether clone exists
-    if [ "$clone_found" = true ]; then
-        clone_backup
-    else
-        find_and_prepare_clone
-    fi
+if [ "$clone_found" = true ]; then
+    # UNRAID_DR partition exists, extract device information and call clone_backup
+    local clone_row="${unraid_dr_partitions[0]}"
+    local clone_name=$(get_column_value "$clone_row" "NAME")
+    
+    # Extract parent device name from partition name
+    local clone_parent_device=$(echo "$clone_name" | sed 's/[0-9]*$//' | sed 's/p$//')
+    
+    # Set global variable
+    CLONE_DEVICE="/dev/$clone_parent_device"
+    log_message "INFO: CLONE_DEVICE set to: $CLONE_DEVICE (from existing UNRAID_DR partition)"
+    debug_print "Global CLONE_DEVICE: $CLONE_DEVICE"
+    
+    # Execute clone_backup function with device parameter
+    log_message "INFO: Executing clone_backup with device: $CLONE_DEVICE"
+    clone_backup "$CLONE_DEVICE"
+else
+    # No UNRAID_DR partition found, go through device selection and formatting
+    find_and_prepare_clone
+fi
 }
 
 # Initialize logging

@@ -3,6 +3,15 @@ Command to get the current information:
 lsblk -b -P -o NAME,UUID,FSTYPE,SIZE,MOUNTPOINT,LABEL,TRAN
 This is now bytes.  Will need bytes to gig conversion for human readable.
 
+Usage scenarios:
+
+./script.sh - Production: live lsblk, no debug output
+./script.sh -debug - Production: live lsblk, with debug output
+./script.sh -lsblk - Testing: test-lsblk file, no debug output
+./script.sh -debug -lsblk - Testing: test-lsblk file, with debug output
+
+This gives you full flexibility to test with synthetic data while still being able to enable/disable debug logging independently!
+
 
 /dev/disk/by-uuid/
 
