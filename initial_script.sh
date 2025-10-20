@@ -654,6 +654,7 @@ find_and_prepare_clone() {
 }
 
 # Function to perform clone backup
+# Function to perform clone backup
 clone_backup() {
     local clone_device="$1"
     
@@ -683,7 +684,7 @@ clone_backup() {
     # Check if device is already mounted
     current_mount_point=$(findmnt -n -o TARGET "$clone_source" 2>/dev/null)
     
-   if [ -n "$current_mount_point" ]; then
+    if [ -n "$current_mount_point" ]; then
         log_message "INFO: $clone_source is already mounted at: $current_mount_point"
         
         # Check if mounted read/write
@@ -743,13 +744,19 @@ clone_backup() {
         
         # Verify mount is read/write
         local mount_options=$(findmnt -n -o OPTIONS "$clone_source" 2>/dev/null)
-        if [[ "$mount_options" != *"rw"* ]] || [[ "$mount_options" == *"ro"* ]]; then
-            log_message "ERROR: Device mounted but not read/write. Mount options: $mount_options"
+        debug_print "Checking mount options after mount: $mount_options"
+        
+        # Extract first option to check if it's rw or ro
+        local first_option=$(echo "$mount_options" | cut -d',' -f1)
+        debug_print "First mount option: $first_option"
+        
+        if [[ "$first_option" == "rw" ]]; then
+            log_message "INFO: Mount verified as read/write"
+        else
+            log_message "ERROR: Device mounted but not read/write. First option: $first_option, Full options: $mount_options"
             umount "$CLONE_MP"
             return 1
         fi
-        
-        log_message "INFO: Mount verified as read/write"
     fi
     
     # --- b. Double check /boot is mounted ---
