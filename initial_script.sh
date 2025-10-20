@@ -683,7 +683,7 @@ clone_backup() {
     # Check if device is already mounted
     current_mount_point=$(findmnt -n -o TARGET "$clone_source" 2>/dev/null)
     
-    if [ -n "$current_mount_point" ]; then
+   if [ -n "$current_mount_point" ]; then
         log_message "INFO: $clone_source is already mounted at: $current_mount_point"
         
         # Check if mounted read/write
