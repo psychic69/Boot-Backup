@@ -1088,6 +1088,8 @@ initial_test() {
     local clone_found=false
     local -a unraid_dr_partitions
     local -a unraid_dr_devices
+    local -a unraid_dr_models
+    local -a unraid_dr_sizes
 
     for i in "${!current_drive_state[@]}"; do
         local row="${current_drive_state[$i]}"
@@ -1098,12 +1100,38 @@ initial_test() {
             debug_print "Found UNRAID_DR partition: $name"
             unraid_dr_partitions+=("$row")
             
+            # Extract parent device name from partition name
+            local parent_device=$(echo "$name" | sed 's/[0-9]*$//' | sed 's/p$//')
+            
+            # Get parent device size and model
+            local parent_size=""
+            local parent_model="Unknown"
+            
+            for j in "${!current_drive_state[@]}"; do
+                local check_row="${current_drive_state[$j]}"
+                local check_name=$(get_column_value "$check_row" "NAME")
+                
+                if [[ "$check_name" == "$parent_device" ]]; then
+                    parent_size=$(get_column_value "$check_row" "SIZE")
+                    # Get model information from lsblk
+                    parent_model=$(lsblk -n -d -o MODEL "/dev/$parent_device" 2>/dev/null | xargs)
+                    if [[ -z "$parent_model" ]]; then
+                        parent_model="Unknown"
+                    fi
+                    break
+                fi
+            done
+            
             # Add device path to list
             if [[ "$name" =~ ^(sd[a-z][0-9]+|nvme[0-9]+n[0-9]+p[0-9]+) ]]; then
                 unraid_dr_devices+=("/dev/$name")
             else
                 unraid_dr_devices+=("$name")
             fi
+            
+            # Store model and size
+            unraid_dr_models+=("$parent_model")
+            unraid_dr_sizes+=("$parent_size")
         fi
     done
 
@@ -1112,10 +1140,15 @@ initial_test() {
         log_message "ERROR: Multiple partitions with the label UNRAID_DR found. You must have only one."
         log_message "ERROR: Please remove the UNRAID_DR label from all but one of the following devices:"
         log_message ""
-        for device in "${unraid_dr_devices[@]}"; do
-            log_message "  - $device"
+        
+        for idx in "${!unraid_dr_devices[@]}"; do
+            local size_human=$(convert_bytes_to_human "${unraid_dr_sizes[$idx]}")
+            log_message "  - Device: ${unraid_dr_devices[$idx]}"
+            log_message "    Model: ${unraid_dr_models[$idx]}"
+            log_message "    Size: $size_human"
+            log_message ""
         done
-        log_message ""
+        
         log_message "ERROR: Exiting script. Please resolve the duplicate UNRAID_DR labels."
         exit 1
     elif [ ${#unraid_dr_partitions[@]} -eq 1 ]; then
