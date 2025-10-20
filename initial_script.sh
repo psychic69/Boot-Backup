@@ -4,15 +4,15 @@
 declare -a current_drive_state
 declare -a clone_array
 DEBUG=false
+USE_TEST_FILE=false
 LOG_FILE=""
-LOG_DIR="/var/log/unraid-boot-check"
-SNAPSHOTS=5
-RETENTION_DAYS=30
-BOOT_UUID=""
-BOOT_MOUNT=""
+LOG_DIR=""
+SNAPSHOTS=""
+RETENTION_DAYS=""
 BOOT_SIZE=""
 CLONE_DEVICE=""
-CLONE_MP="/mnt/disks/backup-temp"
+CLONE_MP=""
+PARAMETER_FILE="./parameter.ini"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -32,6 +32,113 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# --- Load Parameters Function ---
+# Loads configuration parameters from parameter.ini file
+#
+# @uses global PARAMETER_FILE
+# @uses global LOG_DIR, SNAPSHOTS, RETENTION_DAYS, CLONE_MP
+# @return {integer} 0 for success, 1 for failure.
+load_parameters() {
+    if [ ! -f "$PARAMETER_FILE" ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Parameter file '$PARAMETER_FILE' not found." >&2
+        return 1
+    fi
+    
+    if [ ! -r "$PARAMETER_FILE" ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Parameter file '$PARAMETER_FILE' is not readable." >&2
+        return 1
+    fi
+    
+    # Read parameter file
+    while IFS='=' read -r key value; do
+        # Skip empty lines and comments
+        [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+        
+        # Trim whitespace
+        key=$(echo "$key" | xargs)
+        value=$(echo "$value" | xargs)
+        
+        case "$key" in
+            LOG_DIR)
+                LOG_DIR="$value"
+                ;;
+            SNAPSHOTS)
+                SNAPSHOTS="$value"
+                ;;
+            RETENTION_DAYS)
+                RETENTION_DAYS="$value"
+                ;;
+            CLONE_MP)
+                CLONE_MP="$value"
+                ;;
+        esac
+    done < "$PARAMETER_FILE"
+    
+    # Validate LOG_DIR
+    if [ -z "$LOG_DIR" ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: LOG_DIR not defined in parameter file." >&2
+        return 1
+    fi
+    
+    # Validate LOG_DIR format (should be a directory path)
+    if [[ ! "$LOG_DIR" =~ ^/ ]]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: LOG_DIR must be an absolute path starting with '/'. Got: $LOG_DIR" >&2
+        return 1
+    fi
+    
+    # Validate SNAPSHOTS
+    if [ -z "$SNAPSHOTS" ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: SNAPSHOTS not defined in parameter file." >&2
+        return 1
+    fi
+    
+    if ! [[ "$SNAPSHOTS" =~ ^[0-9]+$ ]]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: SNAPSHOTS must be a number. Got: $SNAPSHOTS" >&2
+        return 1
+    fi
+    
+    if [ "$SNAPSHOTS" -lt 1 ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: SNAPSHOTS must be greater than or equal to 1. Got: $SNAPSHOTS" >&2
+        return 1
+    fi
+    
+    # Validate RETENTION_DAYS
+    if [ -z "$RETENTION_DAYS" ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: RETENTION_DAYS not defined in parameter file." >&2
+        return 1
+    fi
+    
+    if ! [[ "$RETENTION_DAYS" =~ ^[0-9]+$ ]]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: RETENTION_DAYS must be a number. Got: $RETENTION_DAYS" >&2
+        return 1
+    fi
+    
+    if [ "$RETENTION_DAYS" -lt 1 ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: RETENTION_DAYS must be greater than or equal to 1. Got: $RETENTION_DAYS" >&2
+        return 1
+    fi
+    
+    # Validate CLONE_MP
+    if [ -z "$CLONE_MP" ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: CLONE_MP not defined in parameter file." >&2
+        return 1
+    fi
+    
+    # Validate CLONE_MP format (should be a directory path)
+    if [[ ! "$CLONE_MP" =~ ^/ ]]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: CLONE_MP must be an absolute path starting with '/'. Got: $CLONE_MP" >&2
+        return 1
+    fi
+    
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - INFO: Parameters loaded successfully:" >&2
+    echo "$(date '+%Y-%m-%d %H:%M:%S') -   LOG_DIR=$LOG_DIR" >&2
+    echo "$(date '+%Y-%m-%d %H:%M:%S') -   SNAPSHOTS=$SNAPSHOTS" >&2
+    echo "$(date '+%Y-%m-%d %H:%M:%S') -   RETENTION_DAYS=$RETENTION_DAYS" >&2
+    echo "$(date '+%Y-%m-%d %H:%M:%S') -   CLONE_MP=$CLONE_MP" >&2
+    
+    return 0
+}
 
 # --- Logging Function ---
 # A simple function to log messages to a specified file and to the console.
@@ -436,7 +543,6 @@ partition_device_new() {
 }
 
 # Function to find and prepare clone drive
-# Function to find and prepare clone drive
 find_and_prepare_clone() {
     log_message "INFO: No UNRAID_DR partition found. Searching for suitable USB drives..."
     
@@ -578,7 +684,8 @@ find_and_prepare_clone() {
         debug_print "User entered device: '$selected_device'"
         
         # Check if the entered device is in the qualified list
-        local device_found=false
+
+    local device_found=false
         for device in "${qualified_devices[@]}"; do
             if [[ "$device" == "$selected_device" ]]; then
                 device_found=true
@@ -653,7 +760,6 @@ find_and_prepare_clone() {
     clone_backup "$CLONE_DEVICE"
 }
 
-# Function to perform clone backup
 # Function to perform clone backup
 clone_backup() {
     local clone_device="$1"
@@ -912,7 +1018,10 @@ clone_backup() {
 # Main function
 initial_test() {
     # Load the drive state
-    load_drive_state
+    if ! load_drive_state; then
+        log_message "FATAL: Failed to load drive state"
+        exit 1
+    fi
     
     # Find all partitions with LABEL "UNRAID" where NAME ends in "1"
     local -a unraid_partitions
@@ -946,15 +1055,15 @@ initial_test() {
     fi
     
     # We have exactly one UNRAID partition
-    # Extract and store boot partition information
+    # Extract and store boot partition information (local variables now)
     local boot_row="${unraid_partitions[0]}"
-    BOOT_UUID=$(get_column_value "$boot_row" "UUID")
-    BOOT_MOUNT=$(get_column_value "$boot_row" "MOUNTPOINT")
+    local boot_uuid=$(get_column_value "$boot_row" "UUID")
+    local boot_mount=$(get_column_value "$boot_row" "MOUNTPOINT")
     BOOT_SIZE=$(get_column_value "$boot_row" "SIZE")
     
-    # Validate that BOOT_MOUNT is /boot
-    if [[ "$BOOT_MOUNT" != "/boot" ]]; then
-        log_message "FATAL: UNRAID partition is not mounted at /boot. Current mount point: '$BOOT_MOUNT'"
+    # Validate that boot_mount is /boot
+    if [[ "$boot_mount" != "/boot" ]]; then
+        log_message "FATAL: UNRAID partition is not mounted at /boot. Current mount point: '$boot_mount'"
         log_message "The UNRAID boot partition must be mounted at /boot for the system to function correctly."
         log_message ""
         print_partition_state "${unraid_partitions[0]}" "${unraid_indices[0]}"
@@ -965,73 +1074,78 @@ initial_test() {
     log_message ""
     print_partition_state "${unraid_partitions[0]}" "${unraid_indices[0]}"
     
-    debug_print "Boot UUID set to: $BOOT_UUID"
-    debug_print "Boot mount set to: $BOOT_MOUNT"
+    debug_print "Boot UUID: $boot_uuid"
+    debug_print "Boot mount: $boot_mount"
     debug_print "Boot size set to: $BOOT_SIZE bytes"
     
-    # Step 4: Scan for UNRAID_DR partition.  There must be one and only one, else the code will not be able to find the proper target. 
-local clone_found=false
-local -a unraid_dr_partitions
-local -a unraid_dr_devices
+    # Step 4: Scan for UNRAID_DR partition
+    local clone_found=false
+    local -a unraid_dr_partitions
+    local -a unraid_dr_devices
 
-for i in "${!current_drive_state[@]}"; do
-    local row="${current_drive_state[$i]}"
-    local label=$(get_column_value "$row" "LABEL")
-    local name=$(get_column_value "$row" "NAME")
-    
-    if [[ "$label" == "UNRAID_DR" ]]; then
-        debug_print "Found UNRAID_DR partition: $name"
-        unraid_dr_partitions+=("$row")
+    for i in "${!current_drive_state[@]}"; do
+        local row="${current_drive_state[$i]}"
+        local label=$(get_column_value "$row" "LABEL")
+        local name=$(get_column_value "$row" "NAME")
         
-        # Add device path to list
-        if [[ "$name" =~ ^(sd[a-z][0-9]+|nvme[0-9]+n[0-9]+p[0-9]+) ]]; then
-            unraid_dr_devices+=("/dev/$name")
-        else
-            unraid_dr_devices+=("$name")
+        if [[ "$label" == "UNRAID_DR" ]]; then
+            debug_print "Found UNRAID_DR partition: $name"
+            unraid_dr_partitions+=("$row")
+            
+            # Add device path to list
+            if [[ "$name" =~ ^(sd[a-z][0-9]+|nvme[0-9]+n[0-9]+p[0-9]+) ]]; then
+                unraid_dr_devices+=("/dev/$name")
+            else
+                unraid_dr_devices+=("$name")
+            fi
         fi
-    fi
-done
-
-# Check if we found exactly one UNRAID_DR partition
-if [ ${#unraid_dr_partitions[@]} -gt 1 ]; then
-    log_message "ERROR: Multiple partitions with the label UNRAID_DR found. You must have only one."
-    log_message "ERROR: Please remove the UNRAID_DR label from all but one of the following devices:"
-    log_message ""
-    for device in "${unraid_dr_devices[@]}"; do
-        log_message "  - $device"
     done
-    log_message ""
-    log_message "ERROR: Exiting script. Please resolve the duplicate UNRAID_DR labels."
-    exit 1
-elif [ ${#unraid_dr_partitions[@]} -eq 1 ]; then
-    clone_found=true
-    debug_print "Found exactly one UNRAID_DR partition"
-else
-    debug_print "No UNRAID_DR partition found"
-fi
+
+    # Check if we found exactly one UNRAID_DR partition
+    if [ ${#unraid_dr_partitions[@]} -gt 1 ]; then
+        log_message "ERROR: Multiple partitions with the label UNRAID_DR found. You must have only one."
+        log_message "ERROR: Please remove the UNRAID_DR label from all but one of the following devices:"
+        log_message ""
+        for device in "${unraid_dr_devices[@]}"; do
+            log_message "  - $device"
+        done
+        log_message ""
+        log_message "ERROR: Exiting script. Please resolve the duplicate UNRAID_DR labels."
+        exit 1
+    elif [ ${#unraid_dr_partitions[@]} -eq 1 ]; then
+        clone_found=true
+        debug_print "Found exactly one UNRAID_DR partition"
+    else
+        debug_print "No UNRAID_DR partition found"
+    fi
     
     # Step 5 & 6: Call appropriate function based on whether clone exists
-if [ "$clone_found" = true ]; then
-    # UNRAID_DR partition exists, extract device information and call clone_backup
-    local clone_row="${unraid_dr_partitions[0]}"
-    local clone_name=$(get_column_value "$clone_row" "NAME")
-    
-    # Extract parent device name from partition name
-    local clone_parent_device=$(echo "$clone_name" | sed 's/[0-9]*$//' | sed 's/p$//')
-    
-    # Set global variable
-    CLONE_DEVICE="/dev/$clone_parent_device"
-    log_message "INFO: CLONE_DEVICE set to: $CLONE_DEVICE (from existing UNRAID_DR partition)"
-    debug_print "Global CLONE_DEVICE: $CLONE_DEVICE"
-    
-    # Execute clone_backup function with device parameter
-    log_message "INFO: Executing clone_backup with device: $CLONE_DEVICE"
-    clone_backup "$CLONE_DEVICE"
-else
-    # No UNRAID_DR partition found, go through device selection and formatting
-    find_and_prepare_clone
-fi
+    if [ "$clone_found" = true ]; then
+        # UNRAID_DR partition exists, extract device information and call clone_backup
+        local clone_row="${unraid_dr_partitions[0]}"
+        local clone_name=$(get_column_value "$clone_row" "NAME")
+        
+        # Extract parent device name from partition name
+        local clone_parent_device=$(echo "$clone_name" | sed 's/[0-9]*$//' | sed 's/p$//')
+        
+        # Set global variable
+        CLONE_DEVICE="/dev/$clone_parent_device"
+        log_message "INFO: CLONE_DEVICE set to: $CLONE_DEVICE (from existing UNRAID_DR partition)"
+        debug_print "Global CLONE_DEVICE: $CLONE_DEVICE"
+        
+        # Execute clone_backup function with device parameter
+        log_message "INFO: Executing clone_backup with device: $CLONE_DEVICE"
+        clone_backup "$CLONE_DEVICE"
+    else
+        # No UNRAID_DR partition found, go through device selection and formatting
+        find_and_prepare_clone
+    fi
 }
+
+# Load parameters first
+if ! load_parameters; then
+    exit 1
+fi
 
 # Initialize logging
 if ! setup_logging; then
@@ -1040,6 +1154,7 @@ if ! setup_logging; then
 fi
 
 log_message "INFO: Starting UNRAID boot partition check script"
+log_message "INFO: Loaded parameters from $PARAMETER_FILE"
 
 # Run the main function
 initial_test
