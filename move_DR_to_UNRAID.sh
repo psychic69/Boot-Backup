@@ -14,29 +14,32 @@ set -e
 # --- 1. PRE-CHECK: Ensure no "UNRAID" drive already exists ---
 echo "Checking for existing '$FINAL_LABEL' drive..."
 
-# ---
-# THIS IS THE CORRECTED LINE: Added -n -l to suppress tree output
-# ---
 CONFLICT_PART_NAME=$(lsblk -n -l -o NAME,LABEL | grep -w "$FINAL_LABEL" | awk '{print $1}')
 
 if [ -n "$CONFLICT_PART_NAME" ]; then
     # Found a conflict. Gather detailed info.
     CONFLICT_DEV_PATH="/dev/$CONFLICT_PART_NAME"
     
-    # Get all info in one line using lsblk's list format.
-    # -p: full path, -n: no tree, -l: list, -b: size in bytes
-    INFO_LINE=$(lsblk -p -n -l -b -o NAME,MOUNTPOINT,UUID,FSTYPE,LABEL,SIZE,TRAN "$CONFLICT_DEV_PATH")
+    # --- Get the parent device path (e.g., /dev/sda) ---
+    PARENT_DEV_PATH=$(lsblk -p -n -o PKNAME "$CONFLICT_DEV_PATH" | head -n 1)
 
-    # Parse the info
-    DRIVE_LOC=$(echo "$INFO_LINE" | awk '{print $1}')
-    MOUNTPOINT=$(echo "$INFO_LINE" | awk '{print $2}')
-    UUID=$(echo "$INFO_LINE" | awk '{print $3}')
-    FSTYPE=$(echo "$INFO_LINE" | awk '{print $4}')
-    LABEL=$(echo "$INFO_LINE" | awk '{print $5}')
-    SIZE_BYTES=$(echo "$INFO_LINE" | awk '{print $6}')
-    TRANSPORT=$(echo "$INFO_LINE" | awk '{print $7}')
+    # --- Query each piece of info individually to avoid awk parsing errors ---
+    DRIVE_LOC="$CONFLICT_DEV_PATH"
+    MOUNTPOINT=$(lsblk -p -n -l -o MOUNTPOINT "$CONFLICT_DEV_PATH" | head -n 1)
+    UUID=$(lsblk -p -n -l -o UUID "$CONFLICT_DEV_PATH" | head -n 1)
+    FSTYPE=$(lsblk -p -n -l -o FSTYPE "$CONFLICT_DEV_PATH" | head -n 1)
+    LABEL=$(lsblk -p -n -l -o LABEL "$CONFLICT_DEV_PATH" | head -n 1)
+    SIZE_BYTES=$(lsblk -p -n -l -b -o SIZE "$CONFLICT_DEV_PATH" | head -n 1)
     
-    # Make size human-readable (e.g., 7.54G)
+    # --- Get Transport from the PARENT device ---
+    TRANSPORT=$(lsblk -p -n -l -o TRAN "$PARENT_DEV_PATH" | head -n 1)
+
+    # Handle blank mountpoint
+    if [ -z "$MOUNTPOINT" ]; then
+        MOUNTPOINT="[none]"
+    fi
+    
+    # Make size human-readable
     SIZE_HUMAN=$(numfmt --to=iec-i --suffix=B --format="%.2f" "$SIZE_BYTES")
 
     # Print the detailed error message and exit
@@ -66,6 +69,7 @@ echo "Searching for a *single* USB drive with label '$BACKUP_LABEL'..."
 # Get a list of partitions that match the LABEL and are transport type 'usb'
 # -p: full path, -n: no tree, -l: list format
 # We grep for word-boundary 'usb' to be safe
+# This method works because lsblk populates the 'TRAN' column for partitions from their parent.
 MATCHING_USB_DRIVES_INFO=$(lsblk -p -n -l -o NAME,LABEL,TRAN | grep -w "$BACKUP_LABEL" | grep '\busb\b')
 
 # Count how many were found
@@ -126,7 +130,7 @@ if [ -f "$SCRIPT_PATH" ]; then
     echo "Successfully ran the make_bootable script."
 else
     echo "Error: Could not find 'make_bootable_linux.sh' on the drive."
-    umount "$MONT_POINT"
+    umount "$MOUNT_POINT"
     rmdir "$MOUNT_POINT"
     exit 1
 fi
