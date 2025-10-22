@@ -2,6 +2,7 @@
 
 # A script to restore the Unraid bootloader from a backup USB.
 # Run this from the SystemRescue emergency environment.
+# To add to iso
 
 # --- Configuration ---
 BACKUP_LABEL="UNRAID_DR"
