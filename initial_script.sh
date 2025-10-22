@@ -1172,6 +1172,25 @@ initial_test() {
         log_message "INFO: CLONE_DEVICE set to: $CLONE_DEVICE (from existing UNRAID_DR partition)"
         debug_print "Global CLONE_DEVICE: $CLONE_DEVICE"
         
+        # Display clone drive information
+        log_message "INFO: The current UNRAID_DR clone drive is as follows"
+        log_message ""
+        
+        # Find the index of the clone partition row to pass to print_partition_state
+        local clone_row_index=-1
+        for idx in "${!current_drive_state[@]}"; do
+            if [[ "${current_drive_state[$idx]}" == "$clone_row" ]]; then
+                clone_row_index=$idx
+                break
+            fi
+        done
+        
+        if [ $clone_row_index -ge 0 ]; then
+            print_partition_state "$clone_row" "$clone_row_index"
+        else
+            log_message "WARNING: Could not display full partition details for clone drive"
+        fi
+        
         # Execute clone_backup function with device parameter
         log_message "INFO: Executing clone_backup with device: $CLONE_DEVICE"
         clone_backup "$CLONE_DEVICE"
