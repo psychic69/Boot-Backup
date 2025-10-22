@@ -2,7 +2,6 @@
 
 # A script to restore the Unraid bootloader from a backup USB.
 # Run this from the SystemRescue emergency environment.
-# To add to iso
 
 # --- Configuration ---
 BACKUP_LABEL="UNRAID_DR"
@@ -15,9 +14,10 @@ set -e
 # --- 1. PRE-CHECK: Ensure no "UNRAID" drive already exists ---
 echo "Checking for existing '$FINAL_LABEL' drive..."
 
-# Find a partition name (e.g., sda1) that *exactly* matches the FINAL_LABEL
-# The '-w' flag for grep ensures it matches the whole word "UNRAID" and not "UNRAID_DR"
-CONFLICT_PART_NAME=$(lsblk -o NAME,LABEL | grep -w "$FINAL_LABEL" | awk '{print $1}')
+# ---
+# THIS IS THE CORRECTED LINE: Added -n -l to suppress tree output
+# ---
+CONFLICT_PART_NAME=$(lsblk -n -l -o NAME,LABEL | grep -w "$FINAL_LABEL" | awk '{print $1}')
 
 if [ -n "$CONFLICT_PART_NAME" ]; then
     # Found a conflict. Gather detailed info.
@@ -126,7 +126,7 @@ if [ -f "$SCRIPT_PATH" ]; then
     echo "Successfully ran the make_bootable script."
 else
     echo "Error: Could not find 'make_bootable_linux.sh' on the drive."
-    umount "$MOUNT_POINT"
+    umount "$MONT_POINT"
     rmdir "$MOUNT_POINT"
     exit 1
 fi
