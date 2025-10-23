@@ -558,19 +558,40 @@ echo "  ✅ User instructions created"
 echo
 echo "Syncing filesystem..."
 sync
+# Give the filesystem a moment to fully flush
+sleep 2
 
 # Unmount Ventoy USB (if we mounted it)
 if [ "$IS_UNRAID" = true ]; then
     echo "Unmounting Ventoy USB..."
-    if umount "$VENTOY_MOUNT"; then
-        echo "✅ Ventoy USB unmounted successfully"
-        # Optionally remove the mount point directory we created
-        if rmdir "$VENTOY_MOUNT" 2>/dev/null; then
-            echo "  Removed mount point: $VENTOY_MOUNT"
+    
+    # Change directory away from the mount point (in case we're in it)
+    cd "$SCRIPT_DIR" || cd /tmp
+    
+    # Try to unmount with retry
+    UNMOUNT_SUCCESS=false
+    for attempt in 1 2 3; do
+        if umount "$VENTOY_MOUNT" 2>/dev/null; then
+            UNMOUNT_SUCCESS=true
+            echo "✅ Ventoy USB unmounted successfully"
+            # Remove the mount point directory we created
+            if rmdir "$VENTOY_MOUNT" 2>/dev/null; then
+                echo "  Removed mount point: $VENTOY_MOUNT"
+            fi
+            break
+        else
+            if [ $attempt -lt 3 ]; then
+                echo "  Unmount attempt $attempt failed, retrying..."
+                sleep 1
+            fi
         fi
-    else
-        echo "⚠️  Warning: Could not unmount Ventoy USB"
-        echo "   You may need to unmount manually: umount $VENTOY_MOUNT"
+    done
+    
+    if [ "$UNMOUNT_SUCCESS" = false ]; then
+        echo "⚠️  Warning: Could not unmount Ventoy USB after multiple attempts"
+        echo "   The USB may still be in use by a process."
+        echo "   You can unmount manually with: umount $VENTOY_MOUNT"
+        echo "   Or check what's using it with: lsof $VENTOY_MOUNT"
     fi
 fi
 
