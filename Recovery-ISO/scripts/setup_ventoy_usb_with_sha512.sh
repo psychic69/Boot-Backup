@@ -559,6 +559,21 @@ echo
 echo "Syncing filesystem..."
 sync
 
+# Unmount Ventoy USB (if we mounted it)
+if [ "$IS_UNRAID" = true ]; then
+    echo "Unmounting Ventoy USB..."
+    if umount "$VENTOY_MOUNT"; then
+        echo "✅ Ventoy USB unmounted successfully"
+        # Optionally remove the mount point directory we created
+        if rmdir "$VENTOY_MOUNT" 2>/dev/null; then
+            echo "  Removed mount point: $VENTOY_MOUNT"
+        fi
+    else
+        echo "⚠️  Warning: Could not unmount Ventoy USB"
+        echo "   You may need to unmount manually: umount $VENTOY_MOUNT"
+    fi
+fi
+
 echo
 echo "╔════════════════════════════════════════════════════╗"
 echo "║  ✅ SETUP COMPLETE!                                ║"
@@ -579,9 +594,10 @@ echo "              ├── move_dr_to_unraid.sh"
 echo "              └── 00-launcher.sh"
 echo
 echo "WHAT TO DO NOW:"
-echo "  1. Safely eject/unmount the USB"
-echo "  2. Give it to your user with the instructions"
-echo "  3. They boot from USB → Select SystemRescue → Auto-runs!"
+echo "  1. The Ventoy USB has been safely unmounted"
+echo "  2. You can now safely remove the USB drive"
+echo "  3. Give it to your user with the instructions"
+echo "  4. They boot from USB → Select SystemRescue → Auto-runs!"
 echo
 echo "TO UPDATE THE SCRIPT LATER:"
 echo "  1. Mount the Ventoy USB"

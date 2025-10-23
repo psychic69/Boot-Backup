@@ -1,5 +1,9 @@
 Command to get the current information:
 
+git remote set-url origin git@github.com:psychic69/Boot-Backup.git
+git config --global user.email "elefante72@hotmail.com"
+git config --global user.name "psychic69"
+
 lsblk -b -P -o NAME,UUID,FSTYPE,SIZE,MOUNTPOINT,LABEL,TRAN
 This is now bytes.  Will need bytes to gig conversion for human readable.
 
