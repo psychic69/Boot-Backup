@@ -57,9 +57,9 @@ verify_sha512() {
     fi
 }
 
-# Check if move_DR_to_UNRAID.sh exists
-if [ ! -f "$SCRIPT_DIR/move_DR_to_UNRAID.sh" ]; then
-    echo "❌ ERROR: move_DR_to_UNRAID.sh not found!"
+# Check if move_dr_to_unraid.sh exists
+if [ ! -f "$SCRIPT_DIR/move_dr_to_unraid.sh" ]; then
+    echo "❌ ERROR: move_dr_to_unraid.sh not found!"
     echo "   Please make sure it's in the same directory as this script."
     exit 1
 fi
@@ -68,27 +68,128 @@ fi
 echo "Looking for Ventoy USB drive..."
 VENTOY_MOUNT=""
 
-# Try different mount locations
-for mount_point in /media/$USER/$VENTOY_LABEL /media/$VENTOY_LABEL /run/media/$USER/$VENTOY_LABEL /mnt/$VENTOY_LABEL; do
-    if [ -d "$mount_point" ]; then
-        VENTOY_MOUNT="$mount_point"
-        break
-    fi
-done
-
-# If not found, ask user
-if [ -z "$VENTOY_MOUNT" ]; then
-    echo "❓ Could not auto-detect Ventoy USB mount point."
-    echo
-    read -p "Enter Ventoy USB mount point (e.g., /media/$USER/Ventoy): " VENTOY_MOUNT
+# Check if we're running on Unraid
+KERNEL_INFO=$(uname -a)
+IS_UNRAID=false
+if echo "$KERNEL_INFO" | grep -q "Unraid"; then
+    echo "✅ Detected Unraid system"
+    IS_UNRAID=true
     
-    if [ ! -d "$VENTOY_MOUNT" ]; then
-        echo "❌ Directory does not exist: $VENTOY_MOUNT"
+    # Use lsblk to find Ventoy partition on Unraid
+    VENTOY_INFO=$(lsblk -b -P -o NAME,UUID,FSTYPE,SIZE,MOUNTPOINT,LABEL,TRAN | grep 'LABEL="Ventoy"')
+    
+    if [ -n "$VENTOY_INFO" ]; then
+        # Parse the NAME from the lsblk output
+        # Example: NAME="sdc1" UUID="..." ... LABEL="Ventoy"
+        VENTOY_DEVICE_NAME=$(echo "$VENTOY_INFO" | grep -o 'NAME="[^"]*"' | cut -d'"' -f2)
+        VENTOY_DEVICE="/dev/$VENTOY_DEVICE_NAME"
+        VENTOY_MOUNT="/mnt/disks/Ventoy"
+        
+        echo "✅ Found Ventoy device: $VENTOY_DEVICE"
+        
+        # Create mount point if it doesn't exist
+        if [ ! -d "$VENTOY_MOUNT" ]; then
+            echo "Creating mount point: $VENTOY_MOUNT"
+            mkdir -p "$VENTOY_MOUNT"
+        fi
+        
+        # Check if already mounted at the expected location
+        if mountpoint -q "$VENTOY_MOUNT" 2>/dev/null; then
+            echo "✅ Ventoy already mounted at $VENTOY_MOUNT"
+        else
+            # Mount the Ventoy partition
+            echo "Mounting Ventoy partition..."
+            if mount "$VENTOY_DEVICE" "$VENTOY_MOUNT"; then
+                echo "✅ Successfully mounted Ventoy at $VENTOY_MOUNT"
+            else
+                echo "❌ ERROR: Failed to mount Ventoy device"
+                exit 1
+            fi
+        fi
+        
+        # Verify the mount is read-write
+        echo "Checking if mount is read-write..."
+        if touch "$VENTOY_MOUNT/.write_test" 2>/dev/null; then
+            rm "$VENTOY_MOUNT/.write_test"
+            echo "✅ Ventoy mount is read-write"
+        else
+            echo "❌ ERROR: Ventoy mount is read-only!"
+            echo "   Cannot proceed - we need write access to download ISO and create files."
+            echo "   Please remount with read-write permissions:"
+            echo "   mount -o remount,rw $VENTOY_DEVICE $VENTOY_MOUNT"
+            exit 1
+        fi
+    else
+        echo "❌ ERROR: Could not find Ventoy partition on Unraid system"
+        echo "   Please ensure Ventoy USB is plugged in"
+        exit 1
+    fi
+else
+    # Non-Unraid system - use original detection logic
+    echo "Detected non-Unraid system"
+    
+    # Try different mount locations
+    for mount_point in /media/$USER/$VENTOY_LABEL /media/$VENTOY_LABEL /run/media/$USER/$VENTOY_LABEL /mnt/$VENTOY_LABEL; do
+        if [ -d "$mount_point" ]; then
+            VENTOY_MOUNT="$mount_point"
+            break
+        fi
+    done
+
+    # If not found, ask user
+    if [ -z "$VENTOY_MOUNT" ]; then
+        echo "❓ Could not auto-detect Ventoy USB mount point."
+        echo
+        read -p "Enter Ventoy USB mount point (e.g., /media/$USER/Ventoy): " VENTOY_MOUNT
+        
+        if [ ! -d "$VENTOY_MOUNT" ]; then
+            echo "❌ Directory does not exist: $VENTOY_MOUNT"
+            exit 1
+        fi
+    fi
+    
+    # Verify write access on non-Unraid systems too
+    echo "Checking if mount is read-write..."
+    if touch "$VENTOY_MOUNT/.write_test" 2>/dev/null; then
+        rm "$VENTOY_MOUNT/.write_test"
+        echo "✅ Ventoy mount is read-write"
+    else
+        echo "❌ ERROR: Ventoy mount is read-only or no write permission!"
+        echo "   Cannot proceed - we need write access to download ISO and create files."
         exit 1
     fi
 fi
 
 echo "✅ Found Ventoy USB at: $VENTOY_MOUNT"
+echo
+
+# Check available space on Ventoy partition
+echo "Checking available space on Ventoy partition..."
+REQUIRED_SPACE_GB=4
+REQUIRED_SPACE_BYTES=$((REQUIRED_SPACE_GB * 1024 * 1024 * 1024))
+
+# Get available space in bytes using df
+AVAILABLE_SPACE=$(df --output=avail -B1 "$VENTOY_MOUNT" | tail -n 1)
+
+if [ -z "$AVAILABLE_SPACE" ] || [ "$AVAILABLE_SPACE" -le 0 ]; then
+    echo "❌ ERROR: Could not determine available space on Ventoy partition"
+    exit 1
+fi
+
+# Convert to human-readable format
+AVAILABLE_SPACE_GB=$(awk "BEGIN {printf \"%.2f\", $AVAILABLE_SPACE / 1024 / 1024 / 1024}")
+
+echo "  Available space: ${AVAILABLE_SPACE_GB} GB"
+
+if [ "$AVAILABLE_SPACE" -lt "$REQUIRED_SPACE_BYTES" ]; then
+    echo "❌ ERROR: Insufficient space on Ventoy partition!"
+    echo "   Required: ${REQUIRED_SPACE_GB} GB"
+    echo "   Available: ${AVAILABLE_SPACE_GB} GB"
+    echo "   Please free up space or use a larger USB drive."
+    exit 1
+else
+    echo "  ✅ Sufficient space available (need ${REQUIRED_SPACE_GB} GB for ISO download)"
+fi
 echo
 
 # Check if SystemRescue ISO exists (in script directory)
@@ -271,8 +372,8 @@ fi
 
 # Copy recovery script
 echo "Copying recovery script..."
-cp "$SCRIPT_DIR/move_DR_to_UNRAID.sh" "$AUTORUN_DIR/"
-chmod +x "$AUTORUN_DIR/move_DR_to_UNRAID.sh"
+cp "$SCRIPT_DIR/move_dr_to_unraid.sh" "$AUTORUN_DIR/"
+chmod +x "$AUTORUN_DIR/move_dr_to_unraid.sh"
 echo "  ✅ Recovery script copied"
 
 # Create launcher script
@@ -299,7 +400,7 @@ read -p "Continue? (yes/no): " response
 echo
 
 if [[ "$response" =~ ^[Yy][Ee][Ss]$ ]]; then
-    bash /sysrescue.d/autorun/move_DR_to_UNRAID.sh
+    bash /sysrescue.d/autorun/move_dr_to_unraid.sh
     
     echo
     echo "╔══════════════════════════════════════════════════╗"
@@ -443,7 +544,7 @@ TECHNICAL DETAILS
 ─────────────────
 This USB uses Ventoy for multi-boot capability.
 Scripts are auto-injected into SystemRescue at boot.
-Your recovery script: /sysrescue.d/autorun/move_DR_to_UNRAID.sh
+Your recovery script: /sysrescue.d/autorun/move_dr_to_unraid.sh
 
 For support: Check your IT department or Unraid forums
 ───────────────────────────────────────────────────────────
@@ -472,7 +573,7 @@ echo "      ├── ventoy.json"
 echo "      ├── sysrescue_injection.tar.gz"
 echo "      └── sysrescue_injection/"
 echo "          └── sysrescue.d/autorun/"
-echo "              ├── move_DR_to_UNRAID.sh"
+echo "              ├── move_dr_to_unraid.sh"
 echo "              └── 00-launcher.sh"
 echo
 echo "WHAT TO DO NOW:"
@@ -482,7 +583,7 @@ echo "  3. They boot from USB → Select SystemRescue → Auto-runs!"
 echo
 echo "TO UPDATE THE SCRIPT LATER:"
 echo "  1. Mount the Ventoy USB"
-echo "  2. Replace: $VENTOY_MOUNT/ventoy/sysrescue_injection/sysrescue.d/autorun/move_DR_to_UNRAID.sh"
+echo "  2. Replace: $VENTOY_MOUNT/ventoy/sysrescue_injection/sysrescue.d/autorun/move_dr_to_unraid.sh"
 echo "  3. Recreate archive: cd $VENTOY_MOUNT/ventoy/sysrescue_injection && tar -czf ../sysrescue_injection.tar.gz sysrescue.d/"
 echo "  4. Sync and eject"
 echo
