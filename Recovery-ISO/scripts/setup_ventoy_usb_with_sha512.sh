@@ -248,11 +248,13 @@ elif [ "$ISO_EXISTS_ON_USB" = true ]; then
     read -p "Do you want to verify the SHA512 hash of the ISO on USB? (yes/no): " verify_usb_response
     
     if [[ "$verify_usb_response" =~ ^[Yy][Ee][Ss]$ ]]; then
-        # Check if .sha512 file exists locally (we'll need it for verification)
-        if [ ! -f "$SCRIPT_DIR/$SYSRESCUE_SHA512" ]; then
-            echo "📥 SHA512 hash file not found. Downloading..."
-            if wget -O "$SCRIPT_DIR/$SYSRESCUE_SHA512" "$SYSRESCUE_SHA512_URL"; then
-                echo "✅ SHA512 hash file downloaded"
+        # Check if .sha512 file exists on USB (same location as ISO)
+        SHA512_ON_USB="$VENTOY_MOUNT/$SYSRESCUE_SHA512"
+        
+        if [ ! -f "$SHA512_ON_USB" ]; then
+            echo "📥 SHA512 hash file not found on USB. Downloading..."
+            if wget -O "$SHA512_ON_USB" "$SYSRESCUE_SHA512_URL"; then
+                echo "✅ SHA512 hash file downloaded to USB"
             else
                 echo "❌ ERROR: Failed to download SHA512 hash file"
                 echo "   You can download it manually from:"
@@ -260,11 +262,11 @@ elif [ "$ISO_EXISTS_ON_USB" = true ]; then
                 exit 1
             fi
         else
-            echo "✅ SHA512 hash file found locally"
+            echo "✅ SHA512 hash file found on USB"
         fi
         
         # Verify the hash of the ISO on USB
-        if ! verify_sha512 "$VENTOY_MOUNT/$SYSRESCUE_ISO" "$SCRIPT_DIR/$SYSRESCUE_SHA512"; then
+        if ! verify_sha512 "$VENTOY_MOUNT/$SYSRESCUE_ISO" "$SHA512_ON_USB"; then
             echo
             echo "🛑 CRITICAL: Hash verification failed for ISO on USB!"
             echo "   The ISO on your USB drive may be corrupted."
