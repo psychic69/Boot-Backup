@@ -18,6 +18,51 @@ echo "║  Ventoy USB Setup for Unraid Recovery             ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo
 
+# Function to prompt for yes/no with validation and default
+# Usage: ask_yes_no "prompt text" "default_value"
+# Returns: 0 for yes, 1 for no
+ask_yes_no() {
+    local prompt="$1"
+    local default="$2"
+    local response
+    
+    # Format the prompt with default indicator
+    if [ "$default" = "yes" ]; then
+        prompt="$prompt (YES/no): "
+    elif [ "$default" = "no" ]; then
+        prompt="$prompt (yes/NO): "
+    else
+        prompt="$prompt (yes/no): "
+    fi
+    
+    while true; do
+        read -p "$prompt" response
+        
+        # If empty response, use default
+        if [ -z "$response" ]; then
+            if [ -n "$default" ]; then
+                response="$default"
+            else
+                echo "Please enter yes or no."
+                continue
+            fi
+        fi
+        
+        # Check for valid yes/no response (case insensitive)
+        case "${response,,}" in
+            yes|y)
+                return 0
+                ;;
+            no|n)
+                return 1
+                ;;
+            *)
+                echo "Invalid input. Please enter 'yes' or 'no'."
+                ;;
+        esac
+    done
+}
+
 # Function to verify SHA512 hash
 verify_sha512() {
     local iso_file="$1"
@@ -210,9 +255,7 @@ if [ "$ISO_EXISTS_LOCALLY" = true ]; then
     
     # Ask if user wants to verify the hash
     echo
-    read -p "Do you want to verify the SHA512 hash of this ISO? (yes/no): " verify_response
-    
-    if [[ "$verify_response" =~ ^[Yy][Ee][Ss]$ ]]; then
+    if ask_yes_no "Do you want to verify the SHA512 hash of this ISO?" "yes"; then
         # Check if .sha512 file exists locally
         if [ ! -f "$SCRIPT_DIR/$SYSRESCUE_SHA512" ]; then
             echo "📥 SHA512 hash file not found locally. Downloading..."
@@ -245,9 +288,7 @@ elif [ "$ISO_EXISTS_ON_USB" = true ]; then
     
     # Ask if user wants to verify the existing ISO on USB
     echo
-    read -p "Do you want to verify the SHA512 hash of the ISO on USB? (yes/no): " verify_usb_response
-    
-    if [[ "$verify_usb_response" =~ ^[Yy][Ee][Ss]$ ]]; then
+    if ask_yes_no "Do you want to verify the SHA512 hash of the ISO on USB?" "yes"; then
         # Check if .sha512 file exists on USB (same location as ISO)
         SHA512_ON_USB="$VENTOY_MOUNT/$SYSRESCUE_SHA512"
         
@@ -271,8 +312,7 @@ elif [ "$ISO_EXISTS_ON_USB" = true ]; then
             echo "🛑 CRITICAL: Hash verification failed for ISO on USB!"
             echo "   The ISO on your USB drive may be corrupted."
             echo
-            read -p "Do you want to delete it and re-download? (yes/no): " redownload_response
-            if [[ "$redownload_response" =~ ^[Yy][Ee][Ss]$ ]]; then
+            if ask_yes_no "Do you want to delete it and re-download?" "no"; then
                 echo "Removing corrupted ISO from USB..."
                 rm "$VENTOY_MOUNT/$SYSRESCUE_ISO"
                 ISO_EXISTS_ON_USB=false
@@ -300,18 +340,14 @@ if [ "$NEED_DOWNLOAD" = true ] || ([ "$ISO_EXISTS_LOCALLY" = false ] && [ "$ISO_
     echo "📥 SystemRescue ISO not found. Download it?"
     echo "   Size: ~800MB"
     echo "   Version: ${SYSRESCUE_VER}"
-    read -p "Download now? (yes/no): " download_response
-    
-    if [[ "$download_response" =~ ^[Yy][Ee][Ss]$ ]]; then
+    if ask_yes_no "Download now?" "yes"; then
         echo "Downloading SystemRescue ISO..."
         if wget -O "$SCRIPT_DIR/$SYSRESCUE_ISO" "$SYSRESCUE_URL"; then
             echo "✅ ISO download complete"
             
             # Ask if user wants to verify the downloaded ISO
             echo
-            read -p "Do you want to verify the SHA512 hash of the downloaded ISO? (recommended: yes/no): " verify_dl_response
-            
-            if [[ "$verify_dl_response" =~ ^[Yy][Ee][Ss]$ ]]; then
+            if ask_yes_no "Do you want to verify the SHA512 hash of the downloaded ISO? (recommended)" "yes"; then
                 # Download .sha512 file if not already present
                 if [ ! -f "$SCRIPT_DIR/$SYSRESCUE_SHA512" ]; then
                     echo "📥 Downloading SHA512 hash file..."
@@ -429,8 +465,7 @@ VENTOY_JSON="$VENTOY_MOUNT/ventoy/ventoy.json"
 # Check if ventoy.json already exists
 if [ -f "$VENTOY_JSON" ]; then
     echo "  ⚠️  ventoy.json already exists"
-    read -p "  Overwrite? (yes/no): " overwrite_response
-    if [[ ! "$overwrite_response" =~ ^[Yy][Ee][Ss]$ ]]; then
+    if ! ask_yes_no "  Overwrite?" "no"; then
         echo "  ⚠️  Skipping ventoy.json creation"
         echo "  You'll need to manually add the injection configuration"
         echo
