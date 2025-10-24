@@ -1,0 +1,5 @@
+{
+    "control_uefi":[
+        { "VTOY_LINUX_REMOUNT": "1" }
+    ]
+}

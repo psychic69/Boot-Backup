@@ -1,0 +1,19 @@
+{
+  "control": [
+    {
+      "VTOY_DEFAULT_SEARCH_ROOT": "/",
+      "VTOY_MENU_TIMEOUT": 30
+    }
+  ],
+  "control_uefi": [
+    {
+      "VTOY_LINUX_REMOUNT": "1"
+    }
+  ],
+  "menu_alias": [
+    {
+      "image": "/systemrescue-*.iso",
+      "alias": "Unraid Recovery - SystemRescue"
+    }
+  ]
+}
