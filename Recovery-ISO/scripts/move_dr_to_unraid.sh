@@ -123,8 +123,8 @@ echo "   Device:    $BACKUP_DRIVE_PATH"
 umount "$BACKUP_PART_PATH" &>/dev/null || true
 
 echo "Changing label from '$BACKUP_LABEL' to '$FINAL_LABEL'..."
-# Use mlabel from dosfstools to change the FAT32 label
-mlabel -i "$BACKUP_PART_PATH" ::"$FINAL_LABEL"
+# Use fatlabel from dosfstools to change the FAT32 label (modern replacement for mlabel)
+fatlabel "$BACKUP_PART_PATH" "$FINAL_LABEL"
 
 echo "Making the drive bootable..."
 mkdir -p "$MOUNT_POINT"
