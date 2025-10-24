@@ -315,7 +315,7 @@ mkdir -p "$VENTOY_DIR"
 if [ -f "$VENTOY_DIR/ventoy.json" ]; then
     echo "  ⚠️  ventoy.json already exists"
     if ask_yes_no "  Overwrite with new ventoy.json?" "no"; then
-        cat > "$VENTOY_DIR/ventoy.json" << 'VENTOY_JSON_EOF'
+        cat > "$VENTOY_DIR/ventoy.json" << VENTOY_JSON_EOF
 {
   "control": [
     {
@@ -330,7 +330,7 @@ if [ -f "$VENTOY_DIR/ventoy.json" ]; then
   ],
   "menu_alias": [
     {
-      "image": "/systemrescue-*.iso",
+      "image": "$SYSRESCUE_ISO",
       "alias": "Unraid Recovery - SystemRescue"
     }
   ]
