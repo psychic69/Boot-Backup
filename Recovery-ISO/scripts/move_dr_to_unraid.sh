@@ -8,8 +8,8 @@ BACKUP_LABEL="UNRAID_DR"
 FINAL_LABEL="UNRAID"
 MOUNT_POINT="/mnt/unraid_temp"
 
-# Exit immediately if a command fails
-set -e
+# NOTE: We do NOT use 'set -e' because some commands are expected to return
+# non-zero when searching for devices that may not exist
 
 # --- 1. PRE-CHECK: Ensure no "UNRAID" drive already exists ---
 echo "Checking for existing '$FINAL_LABEL' drive..."
@@ -77,41 +77,71 @@ echo "---"
 # --- 2. Find ONE and ONLY ONE USB Backup Drive ---
 echo "Searching for a *single* USB drive with label '$BACKUP_LABEL'..."
 
-# Get a list of partitions that match the LABEL and are transport type 'usb'
-MATCHING_USB_DRIVES_INFO=$(lsblk -p -n -l -o NAME,LABEL,TRAN | grep -w "$BACKUP_LABEL" | grep '\busb\b')
+# First, find all partitions with the BACKUP_LABEL
+MATCHING_PARTITIONS=$(lsblk -p -n -l -o NAME,LABEL | grep -w "$BACKUP_LABEL" | awk '{print $1}')
 
-# Count how many were found
-USB_DRIVE_COUNT=0
-if [ -n "$MATCHING_USB_DRIVES_INFO" ]; then
-    USB_DRIVE_COUNT=$(echo "$MATCHING_USB_DRIVES_INFO" | wc -l)
+# Count how many partitions were found
+PARTITION_COUNT=0
+if [ -n "$MATCHING_PARTITIONS" ]; then
+    PARTITION_COUNT=$(echo "$MATCHING_PARTITIONS" | wc -l)
 fi
 
-# Check the count
+if [ "$PARTITION_COUNT" -eq 0 ]; then
+    echo "🛑 ERROR: No drive with the label '$BACKUP_LABEL' was found."
+    echo "   Please plug in the correct backup USB drive and try again."
+    exit 1
+fi
+
+# Now check each partition to see if it's on a USB drive
+declare -a USB_BACKUP_PARTITIONS
+declare -a USB_BACKUP_DEVICES
+declare -a USB_BACKUP_INFO
+
+while IFS= read -r PART_PATH; do
+    [ -z "$PART_PATH" ] && continue
+    
+    # Get parent device path (e.g., /dev/sda from /dev/sda1)
+    PARENT_DEV=$(lsblk -p -n -o PKNAME "$PART_PATH" | head -n 1)
+    
+    # Get transport type from parent device
+    eval $(lsblk -p -n -P -o TRAN "$PARENT_DEV" | head -n 1)
+    TRANSPORT="$TRAN"
+    
+    # Check if it's a USB device
+    if [ "$TRANSPORT" = "usb" ]; then
+        USB_BACKUP_PARTITIONS+=("$PART_PATH")
+        USB_BACKUP_DEVICES+=("$PARENT_DEV")
+        USB_BACKUP_INFO+=("$PART_PATH (device: $PARENT_DEV)")
+    fi
+done <<< "$MATCHING_PARTITIONS"
+
+# Check the count of USB drives found
+USB_DRIVE_COUNT=${#USB_BACKUP_PARTITIONS[@]}
+
 if [ "$USB_DRIVE_COUNT" -eq 0 ]; then
     echo "🛑 ERROR: No *USB* drive with the label '$BACKUP_LABEL' was found."
+    echo "   Found partition(s) with that label, but they are not on USB drives."
+    echo
+    echo "   Non-USB drives with label '$BACKUP_LABEL':"
+    echo "$MATCHING_PARTITIONS"
+    echo
     echo "   Please plug in the correct backup USB drive and try again."
-    
-    # Check if we found any non-USB drives with that label, to be helpful
-    NON_USB_DRIVES=$(lsblk -p -n -l -o NAME,LABEL,TRAN | grep -w "$BACKUP_LABEL" | grep -v '\busb\b')
-    if [ -n "$NON_USB_DRIVES" ]; then
-        echo
-        echo "   Note: Found non-USB drive(s) with that label:"
-        echo "$NON_USB_DRIVES"
-    fi
     exit 1
 
 elif [ "$USB_DRIVE_COUNT" -gt 1 ]; then
     echo "🛑 ERROR: Found *multiple* USB drives with the label '$BACKUP_LABEL'."
     echo "   This is ambiguous. Please remove the extra drive(s) and leave only the one you wish to use."
     echo
-    echo "   Found drives:"
-    echo "$MATCHING_USB_DRIVES_INFO"
+    echo "   Found USB drives:"
+    for info in "${USB_BACKUP_INFO[@]}"; do
+        echo "   - $info"
+    done
     exit 1
 fi
 
-# If we are here, count is exactly 1. We can now safely get the device paths.
-BACKUP_PART_PATH=$(echo "$MATCHING_USB_DRIVES_INFO" | awk '{print $1}') # e.g., /dev/sdc1
-BACKUP_DRIVE_PATH=$(lsblk -p -n -o PKNAME "$BACKUP_PART_PATH")         # e.g., /dev/sdc
+# If we are here, count is exactly 1. We can now safely use the device paths.
+BACKUP_PART_PATH="${USB_BACKUP_PARTITIONS[0]}"  # e.g., /dev/sdc1
+BACKUP_DRIVE_PATH="${USB_BACKUP_DEVICES[0]}"    # e.g., /dev/sdc
 
 echo "✅ Found one and only one matching USB drive."
 echo "   Partition: $BACKUP_PART_PATH"
@@ -124,20 +154,35 @@ umount "$BACKUP_PART_PATH" &>/dev/null || true
 
 echo "Changing label from '$BACKUP_LABEL' to '$FINAL_LABEL'..."
 # Use fatlabel from dosfstools to change the FAT32 label (modern replacement for mlabel)
-fatlabel "$BACKUP_PART_PATH" "$FINAL_LABEL"
+if ! fatlabel "$BACKUP_PART_PATH" "$FINAL_LABEL"; then
+    echo "🛑 ERROR: Failed to change label. The partition may not be FAT32."
+    exit 1
+fi
 
 echo "Making the drive bootable..."
 mkdir -p "$MOUNT_POINT"
-mount "$BACKUP_PART_PATH" "$MOUNT_POINT"
+
+if ! mount "$BACKUP_PART_PATH" "$MOUNT_POINT"; then
+    echo "🛑 ERROR: Failed to mount $BACKUP_PART_PATH"
+    rmdir "$MOUNT_POINT" 2>/dev/null
+    exit 1
+fi
 
 SCRIPT_PATH="$MOUNT_POINT/make_bootable_linux.sh"
 if [ -f "$SCRIPT_PATH" ]; then
     # Change into the directory before running the script.
     # This is safer as the script may rely on relative paths.
-    (cd "$MOUNT_POINT" && bash ./make_bootable_linux.sh)
+    echo "Running make_bootable_linux.sh..."
+    if ! (cd "$MOUNT_POINT" && bash ./make_bootable_linux.sh); then
+        echo "🛑 ERROR: make_bootable_linux.sh failed"
+        umount "$MOUNT_POINT"
+        rmdir "$MOUNT_POINT"
+        exit 1
+    fi
     echo "Successfully ran the make_bootable script."
 else
-    echo "Error: Could not find 'make_bootable_linux.sh' on the drive."
+    echo "🛑 ERROR: Could not find 'make_bootable_linux.sh' on the drive."
+    echo "   Expected location: $SCRIPT_PATH"
     umount "$MOUNT_POINT"
     rmdir "$MOUNT_POINT"
     exit 1

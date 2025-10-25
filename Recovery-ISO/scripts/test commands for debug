@@ -1,0 +1,1 @@
+export MATCHING_USB_DRIVES_INFO=$(lsblk -p -n -l -o NAME,LABEL,TRAN | grep -w "UNRAID" | grep '\busb\b')
