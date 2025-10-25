@@ -336,6 +336,7 @@ if [ -f "$VENTOY_DIR/ventoy.json" ]; then
   ]
 }
 VENTOY_JSON_EOF
+
         echo "  ✅ ventoy.json updated"
     else
         echo "  ⏭️  Keeping existing ventoy.json"
