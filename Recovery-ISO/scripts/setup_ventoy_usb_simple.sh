@@ -377,10 +377,12 @@ cat > "$VENTOY_MOUNT/UNRAID_RECOVERY_INSTRUCTIONS.txt" << 'INSTRUCTIONS_EOF'
 
 EMERGENCY RECOVERY PROCESS
 ──────────────────────────
+Note:  This process will fail if you have the old UNRAID Usb in the machine, 
+it must be disabled or removed. The assumption is the drive is out of service.
 
 STEP 1: PREPARE
 ───────────────
-☐ Plug in your backup USB (labeled "UNRAID_DR")
+☐ Plug in your backup USB (labeled "UNRAID_DR") - Created by dr_usb_backup.sh
 ☐ Remove any USB drives labeled "UNRAID"
 ☐ Insert this Ventoy USB
 ☐ Restart and boot from this USB
@@ -388,9 +390,9 @@ STEP 1: PREPARE
 STEP 2: BOOT SYSTEMRESCUE
 ──────────────────────────
 1. At the Ventoy menu, select:
-   "SystemRescue" (or the SystemRescue ISO)
+   "Unraid Recovery - SystemRescue" or the Systemrescue.iso
 
-2. Wait for SystemRescue to boot (~30-60 seconds)
+2. Wait for SystemRescue to boot, select normal (~30-60 seconds)
 
 3. You'll see a SystemRescue command prompt
 
@@ -398,28 +400,21 @@ STEP 3: MOUNT VENTOY PARTITION
 ───────────────────────────────
 At the SystemRescue prompt, type:
 
-   mountall
-
-This command will automatically mount all USB drives,
-including this Ventoy USB partition.
+1. The system will map the ventoy base partition into /dev/mapper
+2. run mkdir /mnt/script
+3. ls /dev/mapper and find the ventoy partition.  It should be the only sdx1 (like sdb1)
+4. Mount the ventoy partition:  mount /dev/mapper/sdb1 /mnt/script
+5. If you cannot find the /dev/mapper, run mountall and it should loopback mount it to /dev/sdb1
 
 STEP 4: RUN THE RECOVERY SCRIPT
 ────────────────────────────────
-Find the Ventoy partition (usually /mnt/sd<X>1):
+Change to the directory with the script
 
-   ls /mnt/
+   cd /mnt/script/unraid_recovery
 
-Look for a mount point that contains "unraid_recovery" folder.
-Usually it will be something like /mnt/sdb1 or /mnt/sdc1
+Run the script (ensure UNRAID_DR USB plugged in also)
 
-Once you find it, run:
-
-   bash /mnt/sd<X>1/unraid_recovery/move_dr_to_unraid.sh
-
-Replace <X> with the actual letter (a, b, c, etc.)
-
-Example:
-   bash /mnt/sdb1/unraid_recovery/move_dr_to_unraid.sh
+   ./move_dr_to_unraid.sh
 
 STEP 5: FOLLOW THE PROMPTS
 ───────────────────────────
@@ -427,8 +422,14 @@ The script will:
 ✓ Verify your UNRAID_DR backup USB is plugged in
 ✓ Check for conflicts with existing UNRAID drives
 ✓ Change the label from UNRAID_DR to UNRAID
-✓ Make the drive bootable
+✓ Make the drive bootable, the script may ask to make bootable say "Y"
+✓ Enable UEFI boot.  This script will not work with BIOS only, must have UEFI Bios
 ✓ Show you when it's complete
+
+Note: You may see errors on hidden(2048) on syslinux/MBR.  
+This is because I use modern partition scheme
+which will reduces read/writes as it is not sector aligned w/ USB.
+You should ignore.
 
 STEP 6: FINISH
 ──────────────
@@ -437,8 +438,11 @@ When you see "✅ All done!":
 2. Press Enter
 3. Wait for shutdown
 4. Remove this Ventoy USB
-5. Remove the backup USB (now restored as UNRAID)
-6. Boot normally
+5. Restart w/ restored drive and profit.
+
+Note: Since this is a new USB, you will need to relicense this new drive and the
+old drive will be permanently blacklisted so if you are testing DO NOT relicense else
+your original UNRAID USB will be permanently eliminated from running Unraid.
 
 ═══════════════════════════════════════════════════════════
 
@@ -462,16 +466,6 @@ Problem: "A drive with label UNRAID already exists"
 Problem: Permission denied
 → Make sure you're logged in as root
 → SystemRescue boots as root by default
-
-═══════════════════════════════════════════════════════════
-
-QUICK REFERENCE
-───────────────
-
-Boot USB → Select SystemRescue → Wait for prompt →
-Type: mountall →
-Type: bash /mnt/sdX1/unraid_recovery/move_dr_to_unraid.sh →
-Follow prompts → Type: poweroff → Done!
 
 ═══════════════════════════════════════════════════════════
 INSTRUCTIONS_EOF
