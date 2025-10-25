@@ -168,12 +168,12 @@ if ! mount "$BACKUP_PART_PATH" "$MOUNT_POINT"; then
     exit 1
 fi
 
-SCRIPT_PATH="$MOUNT_POINT/make_bootable_linux.sh"
+SCRIPT_PATH="$MOUNT_POINT/make_bootable_linux"
 if [ -f "$SCRIPT_PATH" ]; then
     # Change into the directory before running the script.
     # This is safer as the script may rely on relative paths.
-    echo "Running make_bootable_linux.sh..."
-    if ! (cd "$MOUNT_POINT" && bash ./make_bootable_linux.sh); then
+    echo "Running make_bootable_linux...."
+    if ! (cd "$MOUNT_POINT" && bash ./make_bootable_linux); then
         echo "🛑 ERROR: make_bootable_linux.sh failed"
         umount "$MOUNT_POINT"
         rmdir "$MOUNT_POINT"
@@ -181,7 +181,7 @@ if [ -f "$SCRIPT_PATH" ]; then
     fi
     echo "Successfully ran the make_bootable script."
 else
-    echo "🛑 ERROR: Could not find 'make_bootable_linux.sh' on the drive."
+    echo "🛑 ERROR: Could not find 'make_bootable_linux' on the root of the USB drive."
     echo "   Expected location: $SCRIPT_PATH"
     umount "$MOUNT_POINT"
     rmdir "$MOUNT_POINT"
