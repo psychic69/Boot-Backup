@@ -12,12 +12,14 @@ CLONE_DEVICE=""
 # Handle argument parsing for both User Scripts (passes path as $1) 
 # and standalone execution.
 
-# First, check if $1 exists and is NOT a flag (doesn't start with "-").
-if [[ -n "$1" ]] && [[ "$1" != -* ]]; then
-    # This looks like the path from User Scripts.
-    # We can save it if we want, but the important part is to shift it.
-    SCRIPT_ORIGINAL_DIR="$1"
-    shift 
+
+# Check if $1 exists AND is NOT a flag (i.e., doesn't start with "-").
+# This will catch a path like "/boot/..." or an empty string ""
+# but will correctly skip a flag like "-debug".
+if [[ $# -gt 0 ]] && [[ "$1" != -* ]]; then
+    # It's the path or an empty string from User Scripts.
+    # We don't need the value, so we just shift it off the stack.
+    shift
 fi
 
 # Now, parse the *remaining* arguments (e.g., -debug, -lsblk, or nothing)
@@ -32,13 +34,13 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         *)
-            echo "Unknown option: $1"
+            # Use quotes around "$1" to properly display empty strings
+            echo "Unknown option: \"$1\""
             echo "Usage: $0 [-debug] [-lsblk]"
             exit 1
             ;;
     esac
 done
-
 #===============================================
 # USER CONFIGURATION - EDIT THESE VALUES
 #===============================================
