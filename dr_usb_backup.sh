@@ -9,12 +9,6 @@ LOG_FILE=""
 BOOT_SIZE=""
 CLONE_DEVICE=""
 
-# Config variables are set in the block below
-LOG_DIR
-SNAPSHOTS
-RETENTION_DAYS
-CLONE_MP
-
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
