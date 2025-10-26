@@ -6,13 +6,14 @@ declare -a clone_array
 DEBUG=false
 USE_TEST_FILE=false
 LOG_FILE=""
-LOG_DIR=""
-SNAPSHOTS=""
-RETENTION_DAYS=""
 BOOT_SIZE=""
 CLONE_DEVICE=""
-CLONE_MP=""
-PARAMETER_FILE="parameter.ini"
+
+# Config variables are set in the block below
+LOG_DIR
+SNAPSHOTS
+RETENTION_DAYS
+CLONE_MP
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -32,6 +33,27 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+#===============================================
+# USER CONFIGURATION - EDIT THESE VALUES
+#===============================================
+
+# LOG_DIR: Absolute path to the directory where logs will be stored.
+LOG_DIR="/boot/logs/unraid-dr"
+
+# SNAPSHOTS: Number of log files to keep (must be >= 1).
+SNAPSHOTS=10
+ 
+# RETENTION_DAYS: Number of days to retain log files (must be >= 1).
+RETENTION_DAYS=30
+
+# CLONE_MP: Absolute path to a temporary mount point for the backup USB.
+CLONE_MP="/mnt/disks/usb-backup-temp"
+
+#===============================================
+# END OF USER CONFIGURATION
+# (Do not edit below this line)
+#===============================================
 
 
 
@@ -106,113 +128,64 @@ setup_logging() {
     return 0
 }
 
-# --- Load Parameters Function ---
-# Loads configuration parameters from parameter.ini file
-# Note: This should be called AFTER setup_logging() so messages are logged
+# --- Validate Parameters Function ---
+# Validates the configuration parameters set in the USER CONFIGURATION block.
+# This must be run BEFORE setup_logging(), so it echoes to stderr.
 #
-# @uses global PARAMETER_FILE
 # @uses global LOG_DIR, SNAPSHOTS, RETENTION_DAYS, CLONE_MP
 # @return {integer} 0 for success, 1 for failure.
-load_parameters() {
-    if [ ! -f "$PARAMETER_FILE" ]; then
-        log_message "FATAL: Parameter file '$PARAMETER_FILE' not found."
-        return 1
-    fi
-    
-    if [ ! -r "$PARAMETER_FILE" ]; then
-        log_message "FATAL: Parameter file '$PARAMETER_FILE' is not readable."
-        return 1
-    fi
-    
-    log_message "INFO: Loading parameters from $PARAMETER_FILE..."
-    
-    # Read parameter file - handle files with or without trailing newline
-    while IFS='=' read -r key value || [ -n "$key" ]; do
-        # Skip empty lines and comments
-        [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
-        
-        # Trim whitespace from key
-        key=$(echo "$key" | xargs)
-        
-        # Trim whitespace and remove quotes from value
-        value=$(echo "$value" | xargs)
-        value="${value%\"}"  # Remove trailing quote
-        value="${value#\"}"  # Remove leading quote
-        
-        case "$key" in
-            LOG_DIR)
-                LOG_DIR="$value"
-                ;;
-            SNAPSHOTS)
-                SNAPSHOTS="$value"
-                ;;
-            RETENTION_DAYS)
-                RETENTION_DAYS="$value"
-                ;;
-            CLONE_MP)
-                CLONE_MP="$value"
-                ;;
-        esac
-    done < "$PARAMETER_FILE"
+validate_parameters() {
+    local error_count=0
     
     # Validate LOG_DIR
     if [ -z "$LOG_DIR" ]; then
-        log_message "FATAL: LOG_DIR not defined in parameter file."
-        return 1
-    fi
-    
-    # Validate LOG_DIR format (should be a directory path)
-    if [[ ! "$LOG_DIR" =~ ^/ ]]; then
-        log_message "FATAL: LOG_DIR must be an absolute path starting with '/'. Got: $LOG_DIR"
-        return 1
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: LOG_DIR is not defined in the script's configuration block." >&2
+        ((error_count++))
+    elif [[ ! "$LOG_DIR" =~ ^/ ]]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: LOG_DIR must be an absolute path starting with '/'. Got: $LOG_DIR" >&2
+        ((error_count++))
     fi
     
     # Validate SNAPSHOTS
     if [ -z "$SNAPSHOTS" ]; then
-        log_message "FATAL: SNAPSHOTS not defined in parameter file."
-        return 1
-    fi
-    
-    if ! [[ "$SNAPSHOTS" =~ ^[0-9]+$ ]]; then
-        log_message "FATAL: SNAPSHOTS must be a number. Got: $SNAPSHOTS"
-        return 1
-    fi
-    
-    if [ "$SNAPSHOTS" -lt 1 ]; then
-        log_message "FATAL: SNAPSHOTS must be greater than or equal to 1. Got: $SNAPSHOTS"
-        return 1
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: SNAPSHOTS is not defined." >&2
+        ((error_count++))
+    elif ! [[ "$SNAPSHOTS" =~ ^[0-9]+$ ]]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: SNAPSHOTS must be a number. Got: $SNAPSHOTS" >&2
+        ((error_count++))
+    elif [ "$SNAPSHOTS" -lt 1 ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: SNAPSHOTS must be greater than or equal to 1. Got: $SNAPSHOTS" >&2
+        ((error_count++))
     fi
     
     # Validate RETENTION_DAYS
     if [ -z "$RETENTION_DAYS" ]; then
-        log_message "FATAL: RETENTION_DAYS not defined in parameter file."
-        return 1
-    fi
-    
-    if ! [[ "$RETENTION_DAYS" =~ ^[0-9]+$ ]]; then
-        log_message "FATAL: RETENTION_DAYS must be a number. Got: $RETENTION_DAYS"
-        return 1
-    fi
-    
-    if [ "$RETENTION_DAYS" -lt 1 ]; then
-        log_message "FATAL: RETENTION_DAYS must be greater than or equal to 1. Got: $RETENTION_DAYS"
-        return 1
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: RETENTION_DAYS is not defined." >&2
+        ((error_count++))
+    elif ! [[ "$RETENTION_DAYS" =~ ^[0-9]+$ ]]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: RETENTION_DAYS must be a number. Got: $RETENTION_DAYS" >&2
+        ((error_count++))
+    elif [ "$RETENTION_DAYS" -lt 1 ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: RETENTION_DAYS must be greater than or equal to 1. Got: $RETENTION_DAYS" >&2
+        ((error_count++))
     fi
     
     # Validate CLONE_MP
     if [ -z "$CLONE_MP" ]; then
-        log_message "FATAL: CLONE_MP not defined in parameter file."
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: CLONE_MP is not defined." >&2
+        ((error_count++))
+    elif [[ ! "$CLONE_MP" =~ ^/ ]]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: CLONE_MP must be an absolute path starting with '/'. Got: $CLONE_MP" >&2
+        ((error_count++))
+    fi
+    
+    if [ $error_count -gt 0 ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: $error_count configuration error(s) found. Please correct them in the script." >&2
         return 1
     fi
     
-    # Validate CLONE_MP format (should be a directory path)
-    if [[ ! "$CLONE_MP" =~ ^/ ]]; then
-        log_message "FATAL: CLONE_MP must be an absolute path starting with '/'. Got: $CLONE_MP"
-        return 1
-    fi
-    
-    log_message "INFO: Parameters validated successfully"
-    
+    # This message will go to stderr, which is fine.
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - INFO: Parameters validated successfully." >&2
     return 0
 }
 
@@ -1200,29 +1173,23 @@ initial_test() {
     fi
 }
 ####################MAIN CODE EXECUTION
-# Default fallback values for logging setup
-LOG_DIR="/var/log/unraid-boot-check"
-SNAPSHOTS=5
-RETENTION_DAYS=30
-CLONE_MP="/mnt/disks/backup-temp"
 
-# Initialize logging with defaults first
+# First, validate parameters. This must be run before logging is set up.
+if ! validate_parameters; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Parameter validation failed. Exiting." >&2
+    exit 1
+fi
+
+# Initialize logging using the validated parameters
 if ! setup_logging; then
     echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Failed to setup logging. Exiting." >&2
     exit 1
 fi
 
 log_message "INFO: Starting UNRAID boot partition check script"
-log_message "INFO: Logging initialized with default values"
-
-# Now load parameters from file (will override defaults)
-if ! load_parameters; then
-    log_message "FATAL: Failed to load parameters from file"
-    exit 1
-fi
 
 # Log the loaded parameters
-log_message "INFO: Parameters loaded from $PARAMETER_FILE"
+log_message "INFO: Configuration parameters:"
 log_message "INFO:   LOG_DIR=$LOG_DIR"
 log_message "INFO:   SNAPSHOTS=$SNAPSHOTS"
 log_message "INFO:   RETENTION_DAYS=$RETENTION_DAYS"
