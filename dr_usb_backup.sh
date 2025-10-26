@@ -9,7 +9,18 @@ LOG_FILE=""
 BOOT_SIZE=""
 CLONE_DEVICE=""
 
-# Parse command line arguments
+# Handle argument parsing for both User Scripts (passes path as $1) 
+# and standalone execution.
+
+# First, check if $1 exists and is NOT a flag (doesn't start with "-").
+if [[ -n "$1" ]] && [[ "$1" != -* ]]; then
+    # This looks like the path from User Scripts.
+    # We can save it if we want, but the important part is to shift it.
+    SCRIPT_ORIGINAL_DIR="$1"
+    shift 
+fi
+
+# Now, parse the *remaining* arguments (e.g., -debug, -lsblk, or nothing)
 while [[ $# -gt 0 ]]; do
     case $1 in
         -debug)
