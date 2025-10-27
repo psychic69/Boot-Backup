@@ -110,11 +110,11 @@ cd /tmp
 git clone <repository-url>
 cd <repository-name>
 
-# 2. Make scripts executable
+# 2. Make scripts executable (if they are not)
 chmod +x dr_usb_create.sh
 chmod +x dr_usb_backup.sh
 
-# 3. Plug in your backup USB drive (will be labeled UNRAID_DR)
+# 3. Plug in your backup USB drive (typically 8GB or more)
 
 # 4. Create the initial backup USB
 ./dr_usb_create.sh
@@ -124,13 +124,13 @@ chmod +x dr_usb_backup.sh
 
 ### Step 2: Create the Recovery USB
 
-> **Note:** The script may be named `setup_ventoy_usb.sh` or `setup_ventoy_usb_simple.sh` depending on your version.
+> **Note:** The script is `setup_ventoy_usb.sh`.
 
 ```bash
 # 1. Install Ventoy on your recovery USB drive
 # Download from: https://www.ventoy.net/
 
-# 2. Make scripts executable (if not already done)
+# 2. Make scripts executable (if not already)
 chmod +x setup_ventoy_usb.sh
 chmod +x move_dr_to_unraid.sh
 
@@ -275,11 +275,9 @@ These documents include:
 
 ---
 
-### 3. `setup_ventoy_usb_simple.sh`
+### 3. `setup_ventoy_usb.sh`
 
 **Purpose:** Creates bootable recovery USB with SystemRescue
-
-> **Note:** Script name may be `setup_ventoy_usb.sh` in your version - functionality is the same.
 
 **What it does:**
 - Detects Ventoy USB automatically (looks for "Ventoy" label)
