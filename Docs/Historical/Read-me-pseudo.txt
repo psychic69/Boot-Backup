@@ -1,0 +1,33 @@
+The Boot Backup suite was created to provide a local backup and easy recovery when the main USB UNRAID dongle faults.
+
+Note:  This extra "drive" will consume a license slot for a device if you keep it in the system upon reboot.  If you wish to have it not count against a device, only insert it upon reboot after the array has started.
+
+What is needed:
+1. Two USB drives, one for the local backup and another for the emergency recovery environment which will handle recovery.
+2. Ventoy on the recovery USB.  The scripts will create the recovery environment, just need to install Ventoy on a USB
+3. (optional) systemrescue 12-02 installed on the ventoy.  If you do not have it the recovery script will automatically download
+4. A place to run the backup script.  The backup script will run on the Unraid server through your own automation/cron or using the user scripts plugin. No tools needed.
+
+What this suite offers:
+
+1. Easy replication of your unraid usb in the same system to allow for emergency recovery backup restore, etc.
+2. Modern USB sector alignment to prevent unnecesary I/O on the USB drive
+3. Delta sync (rsync) technology to minimze the write wear to the backup USB
+4. Auto creates the backup USB and keeps it UNRAID compliant up to 64GB
+5. Creates a label (UNRAID_DR) as to not confuse booting mistakes/issues with the main UNRAID label
+6. Disables UEFI booting mistakes and makes it compliant with native UNRAID make_bootable
+7. Automatically creates the entire restore USB including all needed tools.  Can run from Unraid server to create.
+8. Repeatable and separate backup script. Use your own automation or the excellent user scripts plugin.
+9. Automatic log cleanup.  Set your own retention period or number of logs.  Also choose where you want to write the logs.
+10. Writes the date/time of the lastest successful backup to the min directory of the backup USB in case logs are lost or quick view.
+11. When creating the backup, prevents user from writing to the main USB and will provide a list of compliant USB plugged into the system to choose from with robust information.
+12. Many safety checks so ensure that the /boot main USB is never written to, overwritten, or destroyed.
+
+What this suite doesn't offer
+1. CSM Bios boot.  Although the suite marks the proper boot partition label, not tested or guaranteed to work.  Meant for UEFI Bios only.
+2. At this time a live restore function (meaning you broke your main USB, restore it from the backup).  Future functionality.  This is potentially dangerous so not in first generation.
+3. Snapshotting the backup.  This is a 1:1 backup of the main USB only at this time for simplicity. 
+4. Licensing the DR restored USB drive.  Once the emergency USB is created, the user will boot as normal but the array will not start until the user licenses the new USB with UNRAID.  Be aware that relicensing will render the original USB drive blacklisted forever in an UNRAID environment
+
+
+Provide the link to UNRAID for re-licensing a new USB stick when the old one breaks permanently. 

@@ -1,23 +1,22 @@
-# Unraid USB Recovery - Ventoy Solution
+# Unraid USB Recovery Prep- Ventoy Solution
 
 ## Quick Start
 
 **You only need:**
-1. `setup_ventoy_usb_simple.sh` - The setup script
+1. `setup_ventoy_usb.sh` - The setup script
 2. `move_dr_to_unraid.sh` - The recovery script
 
 **No other files needed!** The script creates everything else automatically.
 
 ## Setup (Run from Unraid)
 
-```bash
-# Make scripts executable
-chmod +x setup_ventoy_usb_simple.sh
+# Make scripts executable if they are NOT.  By default they should be.
+chmod +x setup_ventoy_usb.sh
 chmod +x move_dr_to_unraid.sh
 
 # Run setup (will auto-create ventoy.json)
-./setup_ventoy_usb_simple.sh
-```
+./setup_ventoy_usb.sh
+
 
 The script will:
 - ✅ Find your Ventoy USB automatically
@@ -26,7 +25,7 @@ The script will:
 - ✅ Auto-create ventoy.json with proper settings
 - ✅ Create user instructions
 
-## What Gets Created
+## What Gets Created on the Ventoy drive
 
 ```
 Ventoy USB/
@@ -40,7 +39,8 @@ Ventoy USB/
 
 ## ventoy.json Configuration
 
-The script automatically creates `ventoy.json` with these important settings:
+The script automatically creates `ventoy.json` with these important settings,
+to make booting easier.  
 
 ```json
 {
@@ -57,7 +57,7 @@ The script automatically creates `ventoy.json` with these important settings:
   ],
   "menu_alias": [
     {
-      "image": "/systemrescue-*.iso",
+      "image": "/systemrescue-12.02-amd64.iso",
       "alias": "Unraid Recovery - SystemRescue"
     }
   ]
@@ -90,9 +90,10 @@ The script automatically creates `ventoy.json` with these important settings:
 
 1. **Boot from Ventoy USB**
 2. **Select "Unraid Recovery - SystemRescue"**
-3. **At prompt, type:** `mountall`
-4. **Run:** `bash /mnt/sdX1/unraid_recovery/move_dr_to_unraid.sh`
-5. **When complete, type:** `poweroff`
+3. **At prompt, type:** `mountall`.  
+4. **Run lsblk to see what 'sd{x}' the ventoy partition is mounted
+5. **Run:** `bash /mnt/sdX1/unraid_recovery/move_dr_to_unraid.sh`
+6. **When complete, type:** `poweroff`
 
 The entire process takes 2-3 minutes after boot.
 
@@ -167,7 +168,7 @@ Without this setting, users would have to manually remount the partition, adding
 ### Tools Used
 
 - **Ventoy** - Multi-boot USB solution
-- **SystemRescue** - Arch-based rescue environment  
+- **SystemRescue** - Arch-based rescue environment. Will download in creation.  
 - **fatlabel** - Modern FAT32 label tool (native in SystemRescue)
 - **SHA512** - Cryptographic verification of ISO integrity
 
@@ -181,7 +182,7 @@ Without this setting, users would have to manually remount the partition, adding
 ## Files Needed
 
 ### Required (in same directory):
-- `setup_ventoy_usb_simple.sh`
+- `setup_ventoy_usb.sh`
 - `move_dr_to_unraid.sh`
 
 ### Auto-generated:
@@ -202,7 +203,7 @@ For issues:
 ---
 
 **Remember:** This solution requires only TWO files to start:
-1. `setup_ventoy_usb_simple.sh`
+1. `setup_ventoy_usb.sh`
 2. `move_dr_to_unraid.sh`
 
 Everything else is auto-generated! 🎉
