@@ -107,8 +107,8 @@ This separation ensures you never accidentally reformat your backup USB during r
 ```bash
 # 1. Download the scripts
 cd /tmp
-git clone <repository-url>
-cd <repository-name>
+git clone https://github.com/psychic69/Boot-backup.git
+cd Boot-backup
 
 # 2. Make scripts executable (if they are not)
 chmod +x dr_usb_create.sh
