@@ -365,8 +365,7 @@ Ventoy USB/
    poweroff
    ```
    - Remove the Ventoy recovery USB
-   - Remove the backup USB (now your main `UNRAID` boot drive)
-   - Boot normally
+   - Boot normally (the new USB should have UNRAID label)
 
 7. **License the New USB**
    - Unraid will start but the array won't start automatically
