@@ -7,7 +7,7 @@
 
 set -e
 
-VERSION="1.1.2"
+VERSION="1.1.3"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source configuration file
@@ -41,11 +41,11 @@ VENTOY_MOUNT=""
 IS_UNRAID=false
 VENTOY_FRESH_INSTALL=false
 
-echo "╔════════════════════════════════════════════════════╗"
-echo "║  Ventoy USB Setup for Unraid Recovery              ║"!ls
-echo "║  Version: $VERSION                                 ║"
-echo "╚════════════════════════════════════════════════════╝"
-echo
+printf "╔════════════════════════════════════════════════════╗\n"
+printf "║  Ventoy USB Setup for Unraid Recovery              ║\n"
+printf "║  Version: %-41s║\n" "$VERSION"
+printf "╚════════════════════════════════════════════════════╝\n"
+printf "\n"
 
 # ============================================================================
 # UTILITY FUNCTIONS
@@ -302,34 +302,45 @@ check_ventoy_origin() {
         echo
     done
 
-    # Get device selection from user
+    # Get device selection from user by index
+    local selected_index=""
     local selected_device=""
     local attempt=0
     local max_attempts=2
 
     while [ $attempt -lt $max_attempts ]; do
-        echo -n "Enter device name (e.g., sdb): "
-        read selected_device
+        echo -n "Select USB drive by index number: "
+        read selected_index
 
-        local device_found=false
-        for device in "${usb_devices[@]}"; do
-            if [ "$device" = "$selected_device" ]; then
-                device_found=true
-                break
-            fi
-        done
-
-        if [ "$device_found" = true ]; then
-            break
-        else
+        # Validate that input is a number
+        if ! [[ "$selected_index" =~ ^[0-9]+$ ]]; then
             ((attempt++))
             if [ $attempt -lt $max_attempts ]; then
-                echo "❌ Device '$selected_device' not in list. Try again."
+                echo "❌ Please enter a valid number (e.g., 1, 2, etc.)"
             else
                 echo "❌ Maximum attempts reached. Exiting."
                 exit 1
             fi
+            continue
         fi
+
+        # Validate that index is in valid range (1 to count of devices)
+        local device_count=${#usb_devices[@]}
+        if [ "$selected_index" -lt 1 ] || [ "$selected_index" -gt "$device_count" ]; then
+            ((attempt++))
+            if [ $attempt -lt $max_attempts ]; then
+                echo "❌ Invalid index. Please select between 1 and $device_count"
+            else
+                echo "❌ Maximum attempts reached. Exiting."
+                exit 1
+            fi
+            continue
+        fi
+
+        # Get device at the selected index (convert 1-based to 0-based)
+        local index=$((selected_index - 1))
+        selected_device="${usb_devices[$index]}"
+        break
     done
 
     echo

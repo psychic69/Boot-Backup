@@ -2,6 +2,31 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
+## [1.1.3] - 2026-03-23
+
+### Changed
+
+#### Device Selection UI - Index-Based Selection (Safety Improvement)
+- **Replaced device name entry with index number selection**
+  - Before: User typed device name (e.g., "sdb") — prone to typos and fat-fingering
+  - After: User selects by index number (e.g., "1", "2") — much safer and clearer
+  - Example: User sees "[1] Device: sdl" and enters "1" instead of typing "sdl"
+
+#### Input Validation Improvements
+- Added explicit number validation for index selection
+- Shows valid range if user enters invalid index
+- Clear error messages: "Please enter a valid number" vs "Device not in list"
+- Maximum 2 attempts before exiting (prevents accidental device selection)
+
+### Benefits
+✅ **Eliminates fat-finger errors** on device names
+✅ **Clearer user interface** with explicit numbered options
+✅ **Faster selection** (type one digit instead of device name)
+✅ **Better error messages** guide user to correct input
+✅ **Safer overall** reduces risk of selecting wrong device
+
+---
+
 ## [1.1.2] - 2026-03-23
 
 ### Fixed
