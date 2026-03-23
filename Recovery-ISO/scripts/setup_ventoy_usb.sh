@@ -7,7 +7,7 @@
 
 set -e
 
-VERSION="1.0"
+VERSION="1.1.1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source configuration file
@@ -42,7 +42,7 @@ IS_UNRAID=false
 VENTOY_FRESH_INSTALL=false
 
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Ventoy USB Setup for Unraid Recovery             ║"
+echo "║  Ventoy USB Setup for Unraid Recovery              ║"
 echo "║  Version: $VERSION                                 ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo
@@ -222,52 +222,68 @@ check_ventoy_origin() {
     local lsblk_data
     lsblk_data=$(lsblk -b -P -o NAME,UUID,FSTYPE,SIZE,MOUNTPOINT,LABEL,TRAN 2>/dev/null)
 
+    # Find all USB devices (not partitions) that are ≥ 2GB
+    # Then check their partitions for any UNRAID/UNRAID_DR labels to exclude
+    declare -A excluded_devices
+
+    # First, mark any devices that have UNRAID or UNRAID_DR partitions as excluded
     while IFS= read -r line; do
         local name=$(echo "$line" | grep -o 'NAME="[^"]*"' | cut -d'"' -f2)
         local label=$(echo "$line" | grep -o 'LABEL="[^"]*"' | cut -d'"' -f2)
+
+        # Check if this partition is UNRAID or UNRAID_DR
+        if [[ "$label" == "UNRAID" || "$label" == "UNRAID_DR" ]]; then
+            # Mark the parent device as excluded
+            local parent_device=$(echo "$name" | sed 's/[0-9]*$//' | sed 's/p$//')
+            excluded_devices[$parent_device]=1
+        fi
+    done <<< "$lsblk_data"
+
+    # Now find all USB devices (not partitions) that meet requirements
+    while IFS= read -r line; do
+        local name=$(echo "$line" | grep -o 'NAME="[^"]*"' | cut -d'"' -f2)
         local size=$(echo "$line" | grep -o 'SIZE="[^"]*"' | cut -d'"' -f2)
         local tran=$(echo "$line" | grep -o 'TRAN="[^"]*"' | cut -d'"' -f2)
 
-        # Check if this is a partition (ends with number or p+number)
-        if [[ "$name" =~ [0-9]$ ]] && [ -n "$label" ]; then
-            # Skip UNRAID and UNRAID_DR partitions
-            if [[ "$label" == "UNRAID" || "$label" == "UNRAID_DR" ]]; then
+        # Check if this is a device (not a partition - doesn't end with number)
+        if [[ ! "$name" =~ [0-9]$ ]] && [ "$tran" = "usb" ] && [ "$size" -ge 2000000000 ]; then
+            # Skip if this device or any of its partitions are UNRAID/UNRAID_DR
+            if [ -n "${excluded_devices[$name]}" ]; then
                 continue
             fi
 
-            # Get parent device
-            local parent_device=$(echo "$name" | sed 's/[0-9]*$//' | sed 's/p$//')
+            # Get device model
+            local model=$(lsblk -n -d -o MODEL "/dev/$name" 2>/dev/null | xargs)
+            [ -z "$model" ] && model="Unknown"
 
-            # Find parent device in lsblk data to check transport and size
-            local parent_tran=""
-            local parent_size=""
-            local parent_model=""
-
+            # Get the device's current label (if any partition has one)
+            local device_label=""
             while IFS= read -r pline; do
                 local pname=$(echo "$pline" | grep -o 'NAME="[^"]*"' | cut -d'"' -f2)
-                if [ "$pname" = "$parent_device" ]; then
-                    parent_tran=$(echo "$pline" | grep -o 'TRAN="[^"]*"' | cut -d'"' -f2)
-                    parent_size=$(echo "$pline" | grep -o 'SIZE="[^"]*"' | cut -d'"' -f2)
+                local plabel=$(echo "$pline" | grep -o 'LABEL="[^"]*"' | cut -d'"' -f2)
+
+                # Check if this partition belongs to our device
+                if [[ "$pname" =~ ^${name}[0-9] ]] && [ -n "$plabel" ]; then
+                    device_label="$plabel"
                     break
                 fi
             done <<< "$lsblk_data"
 
-            # Check if USB and meets size requirement (≥ 2GB)
-            if [ "$parent_tran" = "usb" ] && [ "$parent_size" -ge 2000000000 ]; then
-                parent_model=$(lsblk -n -d -o MODEL "/dev/$parent_device" 2>/dev/null | xargs)
-                [ -z "$parent_model" ] && parent_model="Unknown"
+            [ -z "$device_label" ] && device_label="(no label)"
 
-                usb_devices+=("$parent_device")
-                usb_models+=("$parent_model")
-                usb_sizes+=("$parent_size")
-                usb_labels+=("$label")
-            fi
+            usb_devices+=("$name")
+            usb_models+=("$model")
+            usb_sizes+=("$size")
+            usb_labels+=("$device_label")
         fi
     done <<< "$lsblk_data"
 
     if [ ${#usb_devices[@]} -eq 0 ]; then
         echo "❌ ERROR: No suitable USB drives found!"
-        echo "   Requirements: USB transport, size ≥ 2GB, already labeled (not UNRAID/UNRAID_DR)"
+        echo "   Requirements:"
+        echo "     - USB transport (not internal disk)"
+        echo "     - Size ≥ 2GB"
+        echo "     - Not labeled UNRAID or UNRAID_DR (reserved for boot/backup)"
         echo "   Did you plug in a USB drive?"
         exit 1
     fi

@@ -2,6 +2,28 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
+## [1.1.1] - 2026-03-23
+
+### Fixed
+
+#### USB Device Scanning
+- **Critical fix:** USB device scanning now detects **all USB drives** regardless of partition state or label status
+  - Previously only detected USB drives with existing partitions that had labels
+  - Now detects: unpartitioned drives, partitioned unlabeled drives, drives with custom labels
+  - Properly filters by size (≥2GB) and excludes UNRAID/UNRAID_DR devices
+  - Example: New unpartitioned USB drives (like `sdl`) now appear in selection list
+
+### Changed
+
+#### Device Selection UI
+- Shows current label for each USB device, or "(no label)" if unlabeled
+- Clearer error message explaining which USB drives qualify
+- Improved device detection logic using two-pass scanning:
+  - **Pass 1:** Identifies any devices with reserved (UNRAID/UNRAID_DR) partitions
+  - **Pass 2:** Lists all qualifying USB devices regardless of partition state
+
+---
+
 ## [1.1] - 2026-03-23
 
 ### Added

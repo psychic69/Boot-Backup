@@ -3,7 +3,7 @@
 ═══════════════════════════════════════════════════════════════
 
 Generated: 2026-03-23
-Version: 1.1
+Version: 1.1.1
 
 ───────────────────────────────────────────────────────────────
 SCRIPTS (Ready to Use)
@@ -196,6 +196,12 @@ Community:
 ───────────────────────────────────────────────────────────────
 VERSION HISTORY
 ───────────────────────────────────────────────────────────────
+
+1.1.1 - 2026-03-23
+  - Fixed USB device scanning to detect all USB drives regardless of partition state
+  - Now detects unpartitioned drives, unlabeled drives, and drives with custom labels
+  - Improved device selection UI with clearer labeling
+  - Maintains all safety checks for UNRAID/UNRAID_DR exclusion
 
 1.1 - 2026-03-23
   - Automatic Ventoy bootstrapping from Unraid

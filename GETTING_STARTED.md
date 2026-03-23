@@ -78,6 +78,7 @@ cd /boot/config/plugins/user.scripts/scripts/DR_USB_Create/
 
 **What happens:**
 - ✅ Auto-detects existing Ventoy OR installs it from scratch
+- ✅ Scans all available USB drives (new, unpartitioned, labeled, unlabeled)
 - ✅ Downloads SystemRescue ISO (SHA512 verified)
 - ✅ Copies recovery script to USB
 - ✅ Creates configuration files

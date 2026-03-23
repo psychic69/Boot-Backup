@@ -285,7 +285,7 @@ These documents include:
 
 **What it does:**
 - **Detects existing Ventoy** or automatically installs it from scratch if not present
-- Scans USB drives (excluding UNRAID/UNRAID_DR drives, requiring ≥2GB size)
+- **Scans all USB drives** (unpartitioned, labeled, unlabeled) excluding UNRAID/UNRAID_DR, requiring ≥2GB size
 - Downloads and installs Ventoy 1.1.10 with SHA256 verification if needed
 - Downloads SystemRescue ISO with SHA512 verification (if not present)
 - Creates `ventoy.json` with proper UEFI remount settings (`VTOY_LINUX_REMOUNT: "1"`)
