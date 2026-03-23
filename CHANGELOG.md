@@ -2,6 +2,28 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
+## [1.1.2] - 2026-03-23
+
+### Fixed
+
+#### Critical Bug in Ventoy Detection
+- **CRITICAL FIX:** Corrected exit status check for existing Ventoy detection
+  - Bug: Used command substitution in if condition which always succeeds, even with empty output
+  - Symptom: Script incorrectly reported "Found existing Ventoy: /dev/" even when no Ventoy exists
+  - Root cause: `if var=$(command)` checks assignment success, not command output
+  - Fix: Changed to `var=$(command); if [ -n "$var" ]` to properly validate output
+  - Impact: Script now correctly continues to USB scanning when no Ventoy is found
+
+### Details
+
+The first `check_ventoy_origin()` function was checking Ventoy existence incorrectly:
+- **Before:** `if ventoy_info=$(lsblk ... | grep 'LABEL="Ventoy"' ...);` — Always evaluates TRUE
+- **After:** `ventoy_info=$(lsblk ...); if [ -n "$ventoy_info" ];` — Only TRUE if output found
+
+This bug prevented users from seeing the USB selection menu and automatically bootstrap Ventoy on new drives.
+
+---
+
 ## [1.1.1] - 2026-03-23
 
 ### Fixed

@@ -3,7 +3,7 @@
 ═══════════════════════════════════════════════════════════════
 
 Generated: 2026-03-23
-Version: 1.1.1
+Version: 1.1.2
 
 ───────────────────────────────────────────────────────────────
 SCRIPTS (Ready to Use)
@@ -196,6 +196,12 @@ Community:
 ───────────────────────────────────────────────────────────────
 VERSION HISTORY
 ───────────────────────────────────────────────────────────────
+
+1.1.2 - 2026-03-23
+  - CRITICAL FIX: Corrected Ventoy detection logic (exit status check)
+  - Bug prevented USB selection menu from appearing when no Ventoy exists
+  - Fixed: Command substitution in if condition now properly validates output
+  - Users can now properly see USB selection and bootstrap Ventoy on new drives
 
 1.1.1 - 2026-03-23
   - Fixed USB device scanning to detect all USB drives regardless of partition state

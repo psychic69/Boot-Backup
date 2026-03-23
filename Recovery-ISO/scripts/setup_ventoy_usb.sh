@@ -7,7 +7,7 @@
 
 set -e
 
-VERSION="1.1.1"
+VERSION="1.1.2"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source configuration file
@@ -42,7 +42,7 @@ IS_UNRAID=false
 VENTOY_FRESH_INSTALL=false
 
 echo "╔════════════════════════════════════════════════════╗"
-echo "║  Ventoy USB Setup for Unraid Recovery              ║"
+echo "║  Ventoy USB Setup for Unraid Recovery              ║"!ls
 echo "║  Version: $VERSION                                 ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo
@@ -199,7 +199,9 @@ check_ventoy_origin() {
     fi
 
     # Use lsblk to find Ventoy partition on USB
-    if ventoy_info=$(lsblk -b -P -o NAME,UUID,FSTYPE,SIZE,MOUNTPOINT,LABEL,TRAN 2>/dev/null | grep 'LABEL="Ventoy"' | head -1); then
+    ventoy_info=$(lsblk -b -P -o NAME,UUID,FSTYPE,SIZE,MOUNTPOINT,LABEL,TRAN 2>/dev/null | grep 'LABEL="Ventoy"' | head -1)
+
+    if [ -n "$ventoy_info" ]; then
         VENTOY_DEVICE_NAME=$(echo "$ventoy_info" | grep -o 'NAME="[^"]*"' | cut -d'"' -f2)
         VENTOY_DEVICE="/dev/$VENTOY_DEVICE_NAME"
 
