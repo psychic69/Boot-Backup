@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENTOY_LABEL="Ventoy"
-SYSRESCUE_VER="12.02"
+SYSRESCUE_VER="12.03"
 SYSRESCUE_ISO="systemrescue-${SYSRESCUE_VER}-amd64.iso"
 SYSRESCUE_SHA512="${SYSRESCUE_ISO}.sha512"
 SYSRESCUE_URL="https://sourceforge.net/projects/systemrescuecd/files/sysresccd-x86/${SYSRESCUE_VER}/${SYSRESCUE_ISO}/download"

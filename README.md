@@ -127,16 +127,18 @@ chmod +x dr_usb_backup.sh
 > **Note:** The script is `setup_ventoy_usb.sh`.
 
 ```bash
+## NOTE : This in version 1.1 will add ventoy full install from unraid!
 # 1. Install Ventoy on your recovery USB drive
 # Download from: https://www.ventoy.net/
 
 # 2. Make scripts executable (if not already)
-chmod +x setup_ventoy_usb.sh
+chmod +x Recovery-ISO/scripts/setup_ventoy_usb.sh
 chmod +x move_dr_to_unraid.sh
 
 # 3. Plug in your Ventoy USB drive
 
 # 4. Create the recovery environment
+Note:  This script is in the Recovery-ISO/scripts directory
 ./setup_ventoy_usb.sh
 
 # The script will:
@@ -292,7 +294,7 @@ These documents include:
 **What gets created on Ventoy USB:**
 ```
 Ventoy USB/
-├── systemrescue-12.02-amd64.iso
+├── systemrescue-12.03-amd64.iso
 ├── UNRAID_RECOVERY_INSTRUCTIONS.txt
 ├── ventoy/
 │   └── ventoy.json

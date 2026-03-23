@@ -12,7 +12,7 @@
   ],
   "menu_alias": [
     {
-      "image": "/systemrescue-*.iso",
+      "image": "/systemrescue-12.03-amd64.iso",
       "alias": "Unraid Recovery - SystemRescue"
     }
   ]
