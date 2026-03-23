@@ -186,7 +186,7 @@ Complete guide to all documentation in the Unraid Boot Backup Suite.
 **Recovery USB:**
 - [GETTING_STARTED.md → Step 3](GETTING_STARTED.md#step-3-create-recovery-usb-5-minutes)
 - [docs/VENTOY_README.md](docs/VENTOY_README.md)
-- [README.md → Scripts Overview → setup_ventoy_usb_simple.sh](README.md#3-setup_ventoy_usb_simplesh)
+- [README.md → Scripts Overview → setup_ventoy_usb.sh](README.md#3-setup_ventoy_usb_simplesh)
 
 **Emergency Recovery:**
 - [README.md → Recovery Process](README.md#recovery-process)
@@ -224,7 +224,7 @@ Complete guide to all documentation in the Unraid Boot Backup Suite.
 
 ## 🔄 Documentation Updates
 
-This documentation is actively maintained. Last updated: 2025-01-XX
+This documentation is actively maintained. Last updated: 2026-03-23
 
 **Found an issue?**
 - Report documentation bugs on GitHub Issues

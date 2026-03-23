@@ -35,9 +35,10 @@ This separation ensures you never accidentally reformat your backup USB during r
    - **Backup USB** (4GB-64GB) - For storing the Unraid boot backup (labeled `UNRAID_DR`)
    - **Recovery USB** (8GB+ recommended) - For the emergency recovery environment
 
-2. **Ventoy installed on the recovery USB**
+2. **(Optional) Ventoy pre-installed on recovery USB**
    - Download from: [Ventoy Official Site](https://www.ventoy.net/)
-   - The scripts will configure Ventoy automatically
+   - **NEW:** The setup script will automatically install Ventoy if not already present
+   - If pre-installed, script will configure it automatically
 
 3. **(Optional) SystemRescue ISO**
    - Recommended version: 12.02 or later
@@ -124,29 +125,30 @@ chmod +x dr_usb_backup.sh
 
 ### Step 2: Create the Recovery USB
 
-> **Note:** The script is `setup_ventoy_usb.sh`.
+> **Note:** The script is `setup_ventoy_usb.sh` and now handles complete Ventoy setup.
 
 ```bash
-## NOTE : This in version 1.1 will add ventoy full install from unraid!
-# 1. Install Ventoy on your recovery USB drive
-# Download from: https://www.ventoy.net/
-
-# 2. Make scripts executable (if not already)
+# 1. Make scripts executable (if not already)
 chmod +x Recovery-ISO/scripts/setup_ventoy_usb.sh
-chmod +x move_dr_to_unraid.sh
+chmod +x Recovery-ISO/scripts/move_dr_to_unraid.sh
 
-# 3. Plug in your Ventoy USB drive
+# 2. Plug in your recovery USB drive (will be formatted if new)
+# The script will automatically detect or install Ventoy
 
-# 4. Create the recovery environment
-Note:  This script is in the Recovery-ISO/scripts directory
-./setup_ventoy_usb.sh
+# 3. Run the setup script
+./Recovery-ISO/scripts/setup_ventoy_usb.sh
 
 # The script will:
-# - Find your Ventoy USB automatically
+# - Auto-detect existing Ventoy, OR
+# - Scan for available USB drives and bootstrap Ventoy if not present
 # - Download SystemRescue ISO (if needed) with SHA512 verification
 # - Copy recovery scripts to USB
 # - Create ventoy.json configuration
+# - Track version changes with upgrade support (-upgrade flag)
 # - Generate user instructions
+
+# To upgrade an existing Ventoy USB to newer script version:
+# ./Recovery-ISO/scripts/setup_ventoy_usb.sh -upgrade
 ```
 
 ### Step 3: Set Up Automated Backups
@@ -188,7 +190,7 @@ These documents include:
 |--------|---------|-----------|------------|-------------|
 | `dr_usb_create.sh` | **Create backup USB** | One-time | ⚠️ High (formats USB) | Initial setup - formats and creates backup USB |
 | `dr_usb_backup.sh` | **Update backup** | Daily/Weekly | ✅ Low (rsync only) | Incremental backups - safe for automation |
-| `setup_ventoy_usb_simple.sh` | **Create recovery USB** | One-time | ⚠️ Medium (downloads ISO) | Sets up emergency recovery environment |
+| `setup_ventoy_usb.sh` | **Create recovery USB** | One-time or -upgrade | ⚠️ Medium (downloads ISO, installs Ventoy if needed) | Sets up emergency recovery environment with automatic Ventoy bootstrap |
 | `move_dr_to_unraid.sh` | **Emergency restore** | As needed | ⚠️ High (changes labels) | Restores UNRAID_DR → UNRAID during recovery |
 
 > **💡 Key Insight:** The bifurcation of creation vs backup ensures `dr_usb_backup.sh` can run safely on automation without risk of reformatting your backup USB.
@@ -279,28 +281,36 @@ These documents include:
 
 ### 3. `setup_ventoy_usb.sh`
 
-**Purpose:** Creates bootable recovery USB with SystemRescue
+**Purpose:** Creates bootable recovery USB with SystemRescue, including automatic Ventoy bootstrap
 
 **What it does:**
-- Detects Ventoy USB automatically (looks for "Ventoy" label)
+- **Detects existing Ventoy** or automatically installs it from scratch if not present
+- Scans USB drives (excluding UNRAID/UNRAID_DR drives, requiring ≥2GB size)
+- Downloads and installs Ventoy 1.1.10 with SHA256 verification if needed
 - Downloads SystemRescue ISO with SHA512 verification (if not present)
 - Creates `ventoy.json` with proper UEFI remount settings (`VTOY_LINUX_REMOUNT: "1"`)
 - Copies `move_dr_to_unraid.sh` recovery script to USB
 - Generates `UNRAID_RECOVERY_INSTRUCTIONS.txt` for users
-- Validates all components
+- **Tracks version** with CURRENT_VERSION file for upgrade management
+- Supports `-upgrade` flag for updating existing Ventoy USBs to newer script versions
 
-**When to run:** Once during initial setup
+**When to run:**
+- Once during initial setup
+- Anytime with `-upgrade` flag to update to newer versions
 
 **What gets created on Ventoy USB:**
 ```
 Ventoy USB/
-├── systemrescue-12.03-amd64.iso
+├── systemrescue-12.02-amd64.iso
 ├── UNRAID_RECOVERY_INSTRUCTIONS.txt
+├── CURRENT_VERSION
 ├── ventoy/
 │   └── ventoy.json
 └── unraid_recovery/
     └── move_dr_to_unraid.sh
 ```
+
+**Configuration file:** Uses `setup_ventoy.ini` to manage all parameters (versions, URLs, ISO names)
 
 ---
 
@@ -411,11 +421,14 @@ Ventoy USB/
 Ventoy USB/
 ├── systemrescue-12.02-amd64.iso
 ├── UNRAID_RECOVERY_INSTRUCTIONS.txt
+├── CURRENT_VERSION                    (tracks script version for upgrades)
 ├── ventoy/
 │   └── ventoy.json
 └── unraid_recovery/
     └── move_dr_to_unraid.sh
 ```
+
+**Note:** The `setup_ventoy.ini` configuration file resides in the scripts directory (not on the USB) and contains all version strings and download URLs for Ventoy and SystemRescue.
 
 ### Ventoy Configuration
 

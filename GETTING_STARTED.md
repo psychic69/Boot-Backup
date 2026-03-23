@@ -8,7 +8,7 @@ Before you begin, gather:
 
 - [ ] **Two USB drives:**
   - One for backup (4-64GB) → Will become `UNRAID_DR`
-  - One for recovery (8GB+) → Must have Ventoy installed
+  - One for recovery (8GB+) → Will have Ventoy auto-installed if needed
 - [ ] **SSH access** to your Unraid server
 - [ ] **5-10 minutes** of your time
 
@@ -64,22 +64,30 @@ cd /boot/config/plugins/user.scripts/scripts/DR_USB_Create/
 **From Unraid Terminal:**
 
 ```bash
-# 1. Ensure Ventoy is installed on your recovery USB
-#    Download from: https://www.ventoy.net/
+# 1. Plug in your recovery USB drive
+#    (Ventoy will be auto-installed if not already present)
 
-# 2. Plug in Ventoy USB
+# 2. Run the setup script
+./Recovery-ISO/scripts/setup_ventoy_usb.sh
 
-# 3. Run the setup script
-./setup_ventoy_usb.sh
+# 3. Follow prompts to scan/select USB if needed
+#    (only happens if Ventoy not already installed)
 
 # 4. Wait for SystemRescue ISO download (~2 minutes)
 ```
 
 **What happens:**
+- ✅ Auto-detects existing Ventoy OR installs it from scratch
 - ✅ Downloads SystemRescue ISO (SHA512 verified)
 - ✅ Copies recovery script to USB
 - ✅ Creates configuration files
 - ✅ Generates user instructions
+- ✅ Tracks version for future upgrades
+
+**To upgrade an existing recovery USB later:**
+```bash
+./Recovery-ISO/scripts/setup_ventoy_usb.sh -upgrade
+```
 
 ---
 
