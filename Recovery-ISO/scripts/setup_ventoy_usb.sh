@@ -174,54 +174,38 @@ verify_sha256() {
     fi
 }
 
-# Version decoder: converts version string (e.g. "1.1.8") to numeric form for comparison
-# Returns: Space-separated major minor patch as zero-padded 3-digit numbers
-# Example: "1.1.8" → "001 001 008"
-version_decoder() {
-    local version="$1"
-    local major minor patch
-
-    # Split version by dots
-    IFS='.' read -r major minor patch <<< "$version"
-
-    # Handle missing parts (default to 0)
-    major=${major:-0}
-    minor=${minor:-0}
-    patch=${patch:-0}
-
-    # Output as zero-padded 3-digit numbers for numeric comparison
-    printf "%03d %03d %03d\n" "$major" "$minor" "$patch"
-}
-
-# Version comparison helpers
-# Returns 0 (true) if version1 > version2, 1 (false) otherwise
-version_gt() {
-    local v1_decoded=$(version_decoder "$1")
-    local v2_decoded=$(version_decoder "$2")
-
-    # Use [[ ]] for proper string comparison with > operator
-    if [[ "$v1_decoded" > "$v2_decoded" ]]; then
+# Compares two version strings up to x.y.z format
+# Returns:
+#   0: versions are equal ($1 == $2)
+#   1: first version is greater ($1 > $2)
+#   2: second version is greater ($2 > $1)
+version_compare() {
+    if [[ "$1" == "$2" ]]; then
         return 0
-    else
-        return 1
     fi
-}
 
-# Returns 0 (true) if versions are equal, 1 (false) otherwise
-version_eq() {
-    [ "$1" = "$2" ]
-}
+    local IFS=.
+    local i
+    # Read versions into arrays
+    local -a v1=($1)
+    local -a v2=($2)
 
-# Returns 0 (true) if version1 < version2, 1 (false) otherwise
-version_lt() {
-    local v1_decoded=$(version_decoder "$1")
-    local v2_decoded=$(version_decoder "$2")
+    # Fill empty slots with zeros (up to 3 levels: x.y.z)
+    for ((i=0; i<3; i++)); do
+        [[ -z ${v1[i]} ]] && v1[i]=0
+        [[ -z ${v2[i]} ]] && v2[i]=0
+    done
 
-    if [[ "$v1_decoded" < "$v2_decoded" ]]; then
-        return 0
-    else
-        return 1
-    fi
+    for ((i=0; i<3; i++)); do
+        if ((10#${v1[i]} > 10#${v2[i]})); then
+            return 1
+        fi
+        if ((10#${v1[i]} < 10#${v2[i]})); then
+            return 2
+        fi
+    done
+
+    return 0
 }
 
 # ============================================================================
@@ -995,13 +979,11 @@ check_versions() {
     echo "  Script version:            $VERSION"
     echo
 
-    # Debug: show version decoder output
-    local script_decoded=$(version_decoder "$VERSION")
-    local current_decoded=$(version_decoder "$current_version")
-    echo "  (Decoded: script=$script_decoded, current=$current_decoded)"
-    echo
+    version_compare "$VERSION" "$current_version"
+    local cmp_result=$?
 
-    if version_gt "$VERSION" "$current_version"; then
+    if [ $cmp_result -eq 1 ]; then
+        # VERSION > current_version
         echo "  ⚠️  Script version is newer than installed version"
         echo
         if ask_yes_no "  Upgrade to version $VERSION?" "yes"; then
@@ -1012,7 +994,8 @@ check_versions() {
             echo
             return 0
         fi
-    elif version_eq "$VERSION" "$current_version"; then
+    elif [ $cmp_result -eq 0 ]; then
+        # Versions are equal
         echo "  ✅ Versions match"
 
         # Safety check: ensure sysrescue is installed
@@ -1027,6 +1010,7 @@ check_versions() {
         fi
         return 0
     else
+        # cmp_result -eq 2: current_version > VERSION
         echo "  ❌ FATAL ERROR: Script version ($VERSION) is older than installed ($current_version)"
         echo "      This is unexpected and may indicate a downgrade attempt."
         echo "      Do not downgrade the script."
