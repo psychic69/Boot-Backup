@@ -7,7 +7,7 @@
 
 set -e
 
-VERSION="1.1.6"
+VERSION="1.1.7"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source configuration file
@@ -314,6 +314,14 @@ check_ventoy_origin() {
         fi
     done
 
+    # Build grammatically correct error message suffix
+    local choice_prompt
+    if [ "$device_count" -eq 1 ]; then
+        choice_prompt="Only option is 1"
+    else
+        choice_prompt="Please choose between $valid_choices"
+    fi
+
     # Get device selection from user by index
     local selected_index=""
     local selected_device=""
@@ -324,6 +332,11 @@ check_ventoy_origin() {
         # Show prompt with available choices
         printf "Select USB drive by index number (%s): " "$valid_choices"
         read -r selected_index || selected_index=""
+
+        # Special case: if only one device and user pressed Enter, auto-select it
+        if [ -z "$selected_index" ] && [ "$device_count" -eq 1 ]; then
+            selected_index="1"
+        fi
 
         # Check if user entered anything
         if [ -z "$selected_index" ]; then
@@ -336,7 +349,7 @@ check_ventoy_origin() {
             continue
         fi
 
-        # Validate that input is a number (use [[ ]] more carefully)
+        # Validate that input is a number
         if ! printf '%d' "$selected_index" >/dev/null 2>&1; then
             ((attempt++)) || true
             printf "❌ Invalid input '%s'. Please enter a number from: %s\n" "$selected_index" "$valid_choices"
@@ -350,7 +363,7 @@ check_ventoy_origin() {
         # Validate that index is in valid range (1 to count of devices)
         if [ "$selected_index" -lt 1 ] || [ "$selected_index" -gt "$device_count" ]; then
             ((attempt++)) || true
-            printf "❌ Invalid selection '%s'. Please choose between %s\n" "$selected_index" "$valid_choices"
+            printf "❌ Invalid selection '%s'. %s\n" "$selected_index" "$choice_prompt"
             if [ "$attempt" -ge "$max_attempts" ]; then
                 printf "❌ Maximum attempts reached. Exiting.\n"
                 exit 1

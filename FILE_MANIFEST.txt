@@ -3,7 +3,7 @@
 ═══════════════════════════════════════════════════════════════
 
 Generated: 2026-03-23
-Version: 1.1.6
+Version: 1.1.7
 
 ───────────────────────────────────────────────────────────────
 SCRIPTS (Ready to Use)
@@ -196,6 +196,11 @@ Community:
 ───────────────────────────────────────────────────────────────
 VERSION HISTORY
 ───────────────────────────────────────────────────────────────
+
+1.1.7 - 2026-03-23
+  - Smart default: Auto-select when only 1 USB drive (just press Enter)
+  - Grammar fixes: Error messages now grammatically correct for 1 vs multiple drives
+  - Better UX: Fewer keystrokes, more natural language
 
 1.1.6 - 2026-03-23
   - CRITICAL FIX: Found actual root cause - [[ ]] =~ regex with set -e

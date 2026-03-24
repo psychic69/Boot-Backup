@@ -2,6 +2,27 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
+## [1.1.7] - 2026-03-23
+
+### Changed
+
+#### Smart Default Selection & Grammar Fixes
+- **Auto-select when only one device:** If only 1 USB drive available and user presses Enter, automatically selects it
+  - No need to type "1" — just press Enter
+  - Faster workflow for single-drive scenarios
+
+- **Grammatically correct error messages:**
+  - Single device: `❌ Invalid selection '2'. Only option is 1` ✅
+  - Multiple devices: `❌ Invalid selection '3'. Please choose between 1,2,3` ✅
+  - No more awkward "choose between 1" when there's only one option
+
+### UX Improvements
+- Fewer keystrokes when only one drive is available
+- Better grammar matches the actual situation
+- More natural, conversational error messages
+
+---
+
 ## [1.1.6] - 2026-03-23
 
 ### Fixed
