@@ -1088,8 +1088,10 @@ if [ "$VENTOY_FRESH_INSTALL" = "false" ] && [ -f "$VENTOY_MOUNT/CURRENT_VERSION"
         echo "  Script version:            $VERSION"
         echo
 
-        version_compare "$VERSION" "$installed_version" || true
+        set +e
+        version_compare "$VERSION" "$installed_version"
         cmp_result=$?
+        set -e
 
         echo "DEBUG: cmp_result=$cmp_result (1=upgrade, 2=downgrade, 0=match)"
     fi
