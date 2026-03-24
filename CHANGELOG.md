@@ -2,7 +2,7 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
-## [1.1.9] - 2026-03-23
+## [1.1.9] - 2026-03-24
 
 ### Fixed
 
@@ -17,19 +17,38 @@ All notable changes to the Unraid Boot Backup Suite are documented in this file.
   - Returns: 0 (equal), 1 (first > second), 2 (second > first)
   - Properly handles x.y.z format (e.g., 1.1.8 > 1.1.7)
   - Works reliably in all bash environments
+  - Fixed return code capture using `set +e/set -e` to prevent `set -e` from masking exit codes
 
-#### Upgrade Flow
+#### Upgrade Flow - Full Reinstallation
 - When script version > installed version:
-  1. Unmounts existing Ventoy
-  2. Resets installation flags
-  3. Re-runs full Ventoy bootstrap and SystemRescue setup
-  4. Installs new version components
-  5. Updates CURRENT_VERSION file
+  1. Unmounts existing Ventoy partition
+  2. Downloads latest Ventoy version with SHA256 verification
+  3. **Directly runs Ventoy2Disk.sh with `-i` flag to overwrite** (not just re-mount)
+  4. Waits for kernel partition table refresh (`partprobe`)
+  5. Mounts freshly installed Ventoy partition
+  6. Downloads and installs latest SystemRescue ISO
+  7. Updates configuration files and version tracking
 - Prevents "partially upgraded" state where some components are old, some are new
+
+#### Device Handling Fixes
+- Fixed partition vs disk device naming:
+  - Ventoy2Disk.sh requires disk device (`/dev/sdl`), not partition (`/dev/sdl1`)
+  - Uses parameter expansion to strip partition numbers: `sdl1` → `sdl`, `nvme0n1p1` → `nvme0n1`
+  - Fixed partprobe to use disk device
+  - Fixed mount to use correct partition after reinstall
+
+#### Error Handling & Safety
+- Added explicit unmount before Ventoy reinstall to prevent mount conflicts
+- Added SHA256 verification for Ventoy downloads
+- Added space validation in `/var/tmp` before download
+- Proper error messages with exit codes if any step fails
+- Fixed variable scoping (`local` keyword only used in functions)
 
 ### UX Improvements
 - Clear messaging when upgrade is triggered
 - Shows version comparison (current vs script) at preflight stage
+- Progress indicators through Ventoy download and installation phases
+- Shows which device is being installed to and why
 - Prevents downgrade attempts with fatal error
 
 ---

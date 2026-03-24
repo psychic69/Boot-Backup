@@ -2,7 +2,7 @@
   UNRAID BOOT BACKUP SUITE - COMPLETE FILE MANIFEST
 ═══════════════════════════════════════════════════════════════
 
-Generated: 2026-03-23
+Generated: 2026-03-24
 Version: 1.1.9
 
 ───────────────────────────────────────────────────────────────
@@ -197,12 +197,16 @@ Community:
 VERSION HISTORY
 ───────────────────────────────────────────────────────────────
 
-1.1.9 - 2026-03-23
+1.1.9 - 2026-03-24
   - CRITICAL FIX: Moved version check to preflight (after mount, before setup)
-  - Version mismatch now triggers full Ventoy + SystemRescue reinstall
+  - Version mismatch now triggers FULL Ventoy + SystemRescue reinstall
   - Replaced custom version_decoder with robust version_compare function
   - Fixed version comparison to properly detect dot releases (1.1.7 vs 1.1.8)
-  - Upgraded to 1.1.8 now properly triggers full system upgrade
+  - Fixed upgrade flow to actually run Ventoy2Disk.sh (not just re-mount)
+  - Fixed device naming: passes disk /dev/sdl (not partition /dev/sdl1) to Ventoy2Disk.sh
+  - Added SHA256 verification for Ventoy downloads during upgrade
+  - Added explicit unmount before reinstall to prevent mount conflicts
+  - Improved error handling and progress messaging throughout upgrade process
 
 1.1.8 - 2026-03-23
   - CRITICAL FIX: Ventoy2Disk.sh invocation now runs from script directory
