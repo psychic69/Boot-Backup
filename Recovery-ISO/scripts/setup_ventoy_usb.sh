@@ -382,17 +382,17 @@ check_ventoy_origin() {
     echo "    All data will be PERMANENTLY LOST."
     echo
 
-    # Confirm with YES
+    # Confirm with YES (2 attempts max)
     local confirmation=""
-    attempt=0
-    while [ $attempt -lt 2 ]; do
+    local attempt=0
+    while true; do
         echo -n "Type 'YES' to proceed: "
-        read confirmation
+        read confirmation || confirmation=""
 
         if [ "$confirmation" = "YES" ]; then
             break
         else
-            ((attempt++))
+            attempt=$((attempt + 1))
             if [ $attempt -lt 2 ]; then
                 echo "❌ Incorrect. Type 'YES' to continue."
             else
