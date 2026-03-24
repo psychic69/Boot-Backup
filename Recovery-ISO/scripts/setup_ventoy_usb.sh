@@ -7,7 +7,7 @@
 
 set -e
 
-VERSION="1.1.4"
+VERSION="1.1.5"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source configuration file
@@ -304,7 +304,15 @@ check_ventoy_origin() {
 
     # Build list of valid choices for the prompt
     local device_count=${#usb_devices[@]}
-    local valid_choices=$(seq 1 $device_count | tr '\n' ',' | sed 's/,$//')
+    local valid_choices=""
+    local i
+    for ((i=1; i<=device_count; i++)); do
+        if [ $i -gt 1 ]; then
+            valid_choices="$valid_choices,$i"
+        else
+            valid_choices="$i"
+        fi
+    done
 
     # Get device selection from user by index
     local selected_index=""
@@ -314,15 +322,15 @@ check_ventoy_origin() {
 
     while true; do
         # Show prompt with available choices
-        echo -n "Select USB drive by index number ($valid_choices): "
-        read selected_index
+        printf "Select USB drive by index number (%s): " "$valid_choices"
+        read -r selected_index || true
 
         # Check if user entered anything
         if [ -z "$selected_index" ]; then
             ((attempt++))
-            echo "❌ Please enter a valid choice ($valid_choices)"
+            printf "❌ Please enter a valid choice (%s)\n" "$valid_choices"
             if [ $attempt -ge $max_attempts ]; then
-                echo "❌ Maximum attempts reached. Exiting."
+                printf "❌ Maximum attempts reached. Exiting.\n"
                 exit 1
             fi
             continue
@@ -331,9 +339,9 @@ check_ventoy_origin() {
         # Validate that input is a number
         if ! [[ "$selected_index" =~ ^[0-9]+$ ]]; then
             ((attempt++))
-            echo "❌ Invalid input. Please enter a number from: $valid_choices"
+            printf "❌ Invalid input. Please enter a number from: %s\n" "$valid_choices"
             if [ $attempt -ge $max_attempts ]; then
-                echo "❌ Maximum attempts reached. Exiting."
+                printf "❌ Maximum attempts reached. Exiting.\n"
                 exit 1
             fi
             continue
@@ -342,9 +350,9 @@ check_ventoy_origin() {
         # Validate that index is in valid range (1 to count of devices)
         if [ "$selected_index" -lt 1 ] || [ "$selected_index" -gt "$device_count" ]; then
             ((attempt++))
-            echo "❌ Invalid selection. Please choose between $valid_choices"
+            printf "❌ Invalid selection. Please choose between %s\n" "$valid_choices"
             if [ $attempt -ge $max_attempts ]; then
-                echo "❌ Maximum attempts reached. Exiting."
+                printf "❌ Maximum attempts reached. Exiting.\n"
                 exit 1
             fi
             continue

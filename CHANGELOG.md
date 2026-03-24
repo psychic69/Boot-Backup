@@ -2,6 +2,32 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
+## [1.1.5] - 2026-03-23
+
+### Fixed
+
+#### Critical Bug: Silent Script Exit on Invalid Input
+- **CRITICAL FIX:** Script was silently exiting instead of showing error messages and retrying
+  - Root cause: `seq | tr | sed` pipeline could fail with `set -e`, causing silent exit
+  - Symptom: User enters invalid index (e.g., "2" when only 1 device exists) → script exits with no message
+  - Fix: Replaced fragile pipeline with simple for-loop string building
+  - Impact: Error messages now display properly and users get actual retry opportunities
+
+#### Robustness Improvements
+- Replaced `echo` with `printf` for consistent, safe output
+- Added `|| true` to read command to handle edge cases
+- Used `read -r` for safer input reading
+- Removed shell pipeline dependencies that could fail silently
+
+### Testing
+After this fix, when user enters invalid index:
+- ✅ Error message displays immediately
+- ✅ User is prompted to try again
+- ✅ 2 retry attempts actually work
+- ✅ Script only exits after exceeding max attempts
+
+---
+
 ## [1.1.4] - 2026-03-23
 
 ### Changed
