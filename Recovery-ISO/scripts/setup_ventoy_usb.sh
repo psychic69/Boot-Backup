@@ -474,11 +474,11 @@ check_ventoy_origin() {
         exit 1
     fi
 
-    # Run Ventoy installer
+    # Run Ventoy installer from its own directory to ensure PATH is set correctly
     echo "Installing Ventoy to /dev/$selected_device..."
     echo
 
-    if ! /bin/bash "$ventoy_script" -i "/dev/$selected_device"; then
+    if ! /bin/bash -c "cd '${ventoy_dir}' && ./Ventoy2Disk.sh -i '/dev/${selected_device}'"; then
         echo "❌ ERROR: Ventoy installation failed"
         rm -rf "$ventoy_dir" "$ventoy_tar" "$ventoy_sha"
         exit 1
