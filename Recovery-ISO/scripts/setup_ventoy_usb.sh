@@ -525,6 +525,14 @@ find_and_mount_ventoy() {
         local ventoy_info
         ventoy_info=$(lsblk -b -P -o NAME,UUID,FSTYPE,SIZE,MOUNTPOINT,LABEL,TRAN 2>/dev/null | grep 'LABEL="Ventoy"' | head -1)
 
+        # Debug: Show what lsblk found
+        if [ -z "$ventoy_info" ]; then
+            echo "DEBUG: lsblk output with Ventoy label:"
+            lsblk -b -P -o NAME,UUID,FSTYPE,SIZE,MOUNTPOINT,LABEL,TRAN 2>/dev/null | grep -i ventoy || echo "  (no matches)"
+            echo "DEBUG: All partition labels:"
+            lsblk -b -P -o NAME,LABEL 2>/dev/null | grep LABEL | head -10
+        fi
+
         if [ -n "$ventoy_info" ]; then
             VENTOY_DEVICE_NAME=$(echo "$ventoy_info" | grep -o 'NAME="[^"]*"' | cut -d'"' -f2)
             VENTOY_DEVICE="/dev/$VENTOY_DEVICE_NAME"
