@@ -515,7 +515,7 @@ check_ventoy_origin() {
 
     # Wait for system to recognize new partitions before cleanup
     echo "Waiting for system to recognize Ventoy partitions..."
-    sleep 2
+    sleep 4
 
     # Refresh kernel's partition table
     if command -v partprobe &> /dev/null; then
@@ -661,7 +661,7 @@ find_and_mount_ventoy() {
 # Function to check available space on Ventoy
 check_ventoy_space() {
     echo "Checking available space on Ventoy partition..."
-    local required_space_gb=1
+    local required_space_gb=2
     local required_space_bytes=$((required_space_gb * 1024 * 1024 * 1024))
 
     local available_space
@@ -683,7 +683,7 @@ check_ventoy_space() {
         echo "   Available: ${available_space_gb} GB"
         exit 1
     else
-        echo "  ✅ Sufficient space available"
+        echo "  ✅ Sufficient space available, Required: ${required_space_gb} GB"
     fi
     echo
 }
@@ -1157,7 +1157,7 @@ if [ "$VENTOY_FRESH_INSTALL" = "false" ] && [ -f "$VENTOY_MOUNT/CURRENT_VERSION"
         # Strip partition number to get the disk device (sdl1 -> sdl, nvme0n1p1 -> nvme0n1)
         ventoy_disk="${VENTOY_DEVICE_NAME%[0-9]*}"
         echo "Running Ventoy2Disk.sh to reinstall Ventoy on /dev/$ventoy_disk..."
-        if ! /bin/bash -c "cd '${ventoy_dir}' && ./Ventoy2Disk.sh -i '/dev/${ventoy_disk}'"; then
+        if ! /bin/bash -c "cd '${ventoy_dir}' && ./Ventoy2Disk.sh -I '/dev/${ventoy_disk}'"; then
             echo "❌ Ventoy installation failed"
             rm -rf "$ventoy_dir" "$ventoy_tar" "$ventoy_sha"
             exit 1
