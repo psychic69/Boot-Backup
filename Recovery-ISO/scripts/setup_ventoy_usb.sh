@@ -1110,20 +1110,84 @@ if [ "$VENTOY_FRESH_INSTALL" = "false" ] && [ -f "$VENTOY_MOUNT/CURRENT_VERSION"
         fi
         echo
 
-        echo "Re-installing Ventoy and SystemRescue with latest version..."
+        echo "Re-installing Ventoy to /dev/$VENTOY_DEVICE_NAME (overwriting existing)..."
         echo
 
-        # Reset flags to trigger full reinstall
-        VENTOY_FRESH_INSTALL=true
-        VENTOY_DEVICE=""
-        VENTOY_MOUNT=""
+        # Directly run Ventoy2Disk.sh to force reinstall (not just re-mount)
+        ventoy_dir="/var/tmp/ventoy-${VENTOY_VERSION}"
+        ventoy_script="$ventoy_dir/Ventoy2Disk.sh"
 
-        # Scan and bootstrap Ventoy again
-        echo "Starting fresh Ventoy installation..."
-        check_ventoy_origin || { echo "❌ Ventoy installation failed"; exit 1; }
-        find_and_mount_ventoy || { echo "❌ Failed to mount Ventoy"; exit 1; }
-        check_ventoy_space || { echo "❌ Insufficient space"; exit 1; }
-        echo "✅ Ventoy upgrade phase complete, continuing with setup..."
+        # Check /var/tmp space
+        avail_mb=$(df /var/tmp 2>/dev/null | awk 'NR==2 {print int($4/1024)}')
+        if [ -z "$avail_mb" ] || [ "$avail_mb" -lt 100 ]; then
+            echo "❌ ERROR: Insufficient space in /var/tmp for Ventoy download"
+            exit 1
+        fi
+
+        # Download and verify Ventoy
+        echo "Downloading Ventoy ${VENTOY_VERSION}..."
+        ventoy_tar="/var/tmp/ventoy-${VENTOY_VERSION}-linux.tar.gz"
+        if ! wget -O "$ventoy_tar" "$VENTOY_DL_URL" 2>&1 | tail -3; then
+            echo "❌ Failed to download Ventoy"
+            exit 1
+        fi
+
+        echo "Verifying Ventoy integrity..."
+        ventoy_sha="/var/tmp/ventoy-sha256.txt"
+        if ! wget -O "$ventoy_sha" "$VENTOY_DL_SHA" 2>&1 | tail -1; then
+            echo "❌ Failed to download SHA256"
+            rm -f "$ventoy_tar"
+            exit 1
+        fi
+
+        if ! verify_sha256 "$ventoy_tar" "$ventoy_sha"; then
+            echo "❌ SHA256 verification failed"
+            rm -f "$ventoy_tar" "$ventoy_sha"
+            exit 1
+        fi
+
+        echo "Extracting Ventoy..."
+        if ! tar -xzf "$ventoy_tar" -C /var/tmp; then
+            echo "❌ Extraction failed"
+            rm -f "$ventoy_tar" "$ventoy_sha"
+            exit 1
+        fi
+
+        # Run Ventoy installer to OVERWRITE existing installation
+        echo "Running Ventoy2Disk.sh to reinstall Ventoy..."
+        if ! /bin/bash -c "cd '${ventoy_dir}' && ./Ventoy2Disk.sh -i '/dev/${VENTOY_DEVICE_NAME}'"; then
+            echo "❌ Ventoy installation failed"
+            rm -rf "$ventoy_dir" "$ventoy_tar" "$ventoy_sha"
+            exit 1
+        fi
+
+        echo "✅ Ventoy reinstalled successfully"
+        echo
+
+        # Cleanup
+        rm -rf "$ventoy_dir" "$ventoy_tar" "$ventoy_sha"
+
+        # Wait for system to recognize new partitions
+        echo "Waiting for system to recognize partitions..."
+        sleep 2
+        if command -v partprobe &> /dev/null; then
+            partprobe "/dev/$VENTOY_DEVICE_NAME" 2>/dev/null || true
+        fi
+        sleep 1
+
+        # Now mount the freshly reinstalled Ventoy
+        VENTOY_DEVICE="/dev/$VENTOY_DEVICE_NAME"
+        VENTOY_MOUNT="/mnt/disks/Ventoy"
+        VENTOY_FRESH_INSTALL=true
+
+        echo "Mounting newly installed Ventoy..."
+        if ! mount "$VENTOY_DEVICE" "$VENTOY_MOUNT"; then
+            echo "❌ Failed to mount Ventoy after reinstall"
+            exit 1
+        fi
+
+        echo "✅ Ventoy reinstallation and mount complete"
+        echo "Continuing with SystemRescue ISO installation..."
         echo
     elif [ $cmp_result -eq 2 ]; then
         # Installed version > script version: DOWNGRADE NOT ALLOWED
