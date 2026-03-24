@@ -1090,6 +1090,8 @@ if [ "$VENTOY_FRESH_INSTALL" = false ] && [ -f "$VENTOY_MOUNT/CURRENT_VERSION" ]
     version_compare "$VERSION" "$installed_version"
     cmp_result=$?
 
+    echo "DEBUG: cmp_result=$cmp_result (1=upgrade, 2=downgrade, 0=match)"
+
     if [ $cmp_result -eq 1 ]; then
         # Script version > installed version: UPGRADE NEEDED
         echo "  ⚠️  Script version is newer - upgrading..."
