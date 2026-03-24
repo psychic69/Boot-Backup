@@ -550,7 +550,28 @@ find_and_mount_ventoy() {
 
             # Check if already mounted
             if mountpoint -q "$VENTOY_MOUNT" 2>/dev/null; then
-                echo "✅ Ventoy already mounted at $VENTOY_MOUNT"
+                # Check if the correct device is mounted
+                local mounted_device=$(df "$VENTOY_MOUNT" 2>/dev/null | tail -1 | awk '{print $1}')
+                if [ "$mounted_device" = "$VENTOY_DEVICE" ]; then
+                    echo "✅ Ventoy already mounted at $VENTOY_MOUNT"
+                else
+                    echo "⚠️  Different device mounted at $VENTOY_MOUNT ($mounted_device)"
+                    echo "Unmounting old device..."
+                    if umount "$VENTOY_MOUNT"; then
+                        echo "✅ Unmounted old device"
+                    else
+                        echo "❌ ERROR: Failed to unmount $mounted_device"
+                        exit 1
+                    fi
+
+                    echo "Mounting Ventoy partition..."
+                    if mount "$VENTOY_DEVICE" "$VENTOY_MOUNT"; then
+                        echo "✅ Successfully mounted Ventoy at $VENTOY_MOUNT"
+                    else
+                        echo "❌ ERROR: Failed to mount Ventoy device"
+                        exit 1
+                    fi
+                fi
             else
                 echo "Mounting Ventoy partition..."
                 if mount "$VENTOY_DEVICE" "$VENTOY_MOUNT"; then
