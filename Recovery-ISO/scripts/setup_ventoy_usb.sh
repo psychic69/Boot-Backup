@@ -199,8 +199,12 @@ version_gt() {
     local v1_decoded=$(version_decoder "$1")
     local v2_decoded=$(version_decoder "$2")
 
-    # Compare as strings (works because of zero-padding): "001 001 008" > "001 001 007"
-    [ "$v1_decoded" '>' "$v2_decoded" ]
+    # Use [[ ]] for proper string comparison with > operator
+    if [[ "$v1_decoded" > "$v2_decoded" ]]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 # Returns 0 (true) if versions are equal, 1 (false) otherwise
@@ -213,7 +217,11 @@ version_lt() {
     local v1_decoded=$(version_decoder "$1")
     local v2_decoded=$(version_decoder "$2")
 
-    [ "$v1_decoded" '<' "$v2_decoded" ]
+    if [[ "$v1_decoded" < "$v2_decoded" ]]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 # ============================================================================
