@@ -488,6 +488,18 @@ check_ventoy_origin() {
     echo "✅ Ventoy installed successfully"
     echo
 
+    # Wait for system to recognize new partitions before cleanup
+    echo "Waiting for system to recognize Ventoy partitions..."
+    sleep 2
+
+    # Refresh kernel's partition table
+    if command -v partprobe &> /dev/null; then
+        partprobe "/dev/$selected_device" 2>/dev/null || true
+    fi
+
+    sleep 1
+    echo
+
     # Cleanup
     echo "Cleaning up temporary files..."
     rm -rf "$ventoy_dir" "$ventoy_tar" "$ventoy_sha"
@@ -1000,20 +1012,6 @@ fi
 # ============================================================================
 
 check_ventoy_origin
-
-# After fresh Ventoy install, wait for system to recognize new partitions
-if [ "$VENTOY_FRESH_INSTALL" = true ]; then
-    echo "Waiting for system to recognize Ventoy partitions..."
-    sleep 2
-
-    # Refresh kernel's partition table
-    if command -v partprobe &> /dev/null; then
-        partprobe /dev/"${VENTOY_DEVICE#/dev/}" 2>/dev/null || true
-    fi
-
-    sleep 1
-fi
-
 find_and_mount_ventoy
 check_ventoy_space
 
