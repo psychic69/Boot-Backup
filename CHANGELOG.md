@@ -2,6 +2,38 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
+## [1.1.9] - 2026-03-23
+
+### Fixed
+
+#### Version Check Moved to Preflight
+- **CRITICAL FIX:** Version compatibility check now runs immediately after mounting existing Ventoy
+  - Before: Version check happened at end of script after setup was already done
+  - After: Preflight check before any setup actions
+  - Impact: Version upgrades now properly trigger full Ventoy and SystemRescue reinstall
+
+#### Version Comparison Function
+- Replaced custom `version_decoder()` with tested `version_compare()` function
+  - Returns: 0 (equal), 1 (first > second), 2 (second > first)
+  - Properly handles x.y.z format (e.g., 1.1.8 > 1.1.7)
+  - Works reliably in all bash environments
+
+#### Upgrade Flow
+- When script version > installed version:
+  1. Unmounts existing Ventoy
+  2. Resets installation flags
+  3. Re-runs full Ventoy bootstrap and SystemRescue setup
+  4. Installs new version components
+  5. Updates CURRENT_VERSION file
+- Prevents "partially upgraded" state where some components are old, some are new
+
+### UX Improvements
+- Clear messaging when upgrade is triggered
+- Shows version comparison (current vs script) at preflight stage
+- Prevents downgrade attempts with fatal error
+
+---
+
 ## [1.1.8] - 2026-03-23
 
 ### Fixed

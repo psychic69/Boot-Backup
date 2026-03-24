@@ -7,7 +7,7 @@
 
 set -e
 
-VERSION="1.1.8"
+VERSION="1.1.9"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source configuration file
@@ -1077,9 +1077,49 @@ check_ventoy_origin
 find_and_mount_ventoy
 check_ventoy_space
 
-# Determine if version check is needed
-if [ "$VENTOY_FRESH_INSTALL" = true ] || [ "$UPGRADE_MODE" = true ] || [ ! -f "$VENTOY_MOUNT/$SYSRESCUE_ISO" ]; then
-    check_versions
+# PREFLIGHT: Always check versions if Ventoy already exists
+# If version mismatch detected, unmount and trigger full reinstall
+if [ "$VENTOY_FRESH_INSTALL" = false ] && [ -f "$VENTOY_MOUNT/CURRENT_VERSION" ]; then
+    local installed_version
+    installed_version=$(cat "$VENTOY_MOUNT/CURRENT_VERSION")
+
+    echo "Checking version compatibility..."
+    echo "  Current installed version: $installed_version"
+    echo "  Script version:            $VERSION"
+    echo
+
+    version_compare "$VERSION" "$installed_version"
+    local cmp_result=$?
+
+    if [ $cmp_result -eq 1 ]; then
+        # Script version > installed version: UPGRADE NEEDED
+        echo "  ⚠️  Script version is newer - upgrading..."
+        echo
+        sync_and_unmount_ventoy
+
+        echo "Re-installing Ventoy and SystemRescue with latest version..."
+        echo
+
+        # Reset flags to trigger full reinstall
+        VENTOY_FRESH_INSTALL=true
+        VENTOY_DEVICE=""
+        VENTOY_MOUNT=""
+
+        # Scan and bootstrap Ventoy again
+        check_ventoy_origin
+        find_and_mount_ventoy
+        check_ventoy_space
+    elif [ $cmp_result -eq 2 ]; then
+        # Installed version > script version: DOWNGRADE NOT ALLOWED
+        echo "  ❌ FATAL: Installed version ($installed_version) is newer than script ($VERSION)"
+        echo "     Downgrade not permitted."
+        sync_and_unmount_ventoy
+        exit 1
+    else
+        # Versions match: continue normally
+        echo "  ✅ Versions match - proceeding with standard setup"
+        echo
+    fi
 fi
 
 install_sysrescue_iso
