@@ -3,7 +3,7 @@
 ═══════════════════════════════════════════════════════════════
 
 Generated: 2026-03-23
-Version: 1.1.3
+Version: 1.1.4
 
 ───────────────────────────────────────────────────────────────
 SCRIPTS (Ready to Use)
@@ -196,6 +196,13 @@ Community:
 ───────────────────────────────────────────────────────────────
 VERSION HISTORY
 ───────────────────────────────────────────────────────────────
+
+1.1.4 - 2026-03-23
+  - Major UX improvements for device selection
+  - Shows available choices in the prompt (1,2,3)
+  - Better error messages with valid choices listed
+  - Fixed retry logic to actually allow 2 attempts
+  - No more silent exits on invalid input
 
 1.1.3 - 2026-03-23
   - Improved device selection: Index number selection instead of typing device name

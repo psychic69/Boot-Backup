@@ -7,7 +7,7 @@
 
 set -e
 
-VERSION="1.1.3"
+VERSION="1.1.4"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source configuration file
@@ -302,22 +302,37 @@ check_ventoy_origin() {
         echo
     done
 
+    # Build list of valid choices for the prompt
+    local device_count=${#usb_devices[@]}
+    local valid_choices=$(seq 1 $device_count | tr '\n' ',' | sed 's/,$//')
+
     # Get device selection from user by index
     local selected_index=""
     local selected_device=""
     local attempt=0
     local max_attempts=2
 
-    while [ $attempt -lt $max_attempts ]; do
-        echo -n "Select USB drive by index number: "
+    while true; do
+        # Show prompt with available choices
+        echo -n "Select USB drive by index number ($valid_choices): "
         read selected_index
+
+        # Check if user entered anything
+        if [ -z "$selected_index" ]; then
+            ((attempt++))
+            echo "❌ Please enter a valid choice ($valid_choices)"
+            if [ $attempt -ge $max_attempts ]; then
+                echo "❌ Maximum attempts reached. Exiting."
+                exit 1
+            fi
+            continue
+        fi
 
         # Validate that input is a number
         if ! [[ "$selected_index" =~ ^[0-9]+$ ]]; then
             ((attempt++))
-            if [ $attempt -lt $max_attempts ]; then
-                echo "❌ Please enter a valid number (e.g., 1, 2, etc.)"
-            else
+            echo "❌ Invalid input. Please enter a number from: $valid_choices"
+            if [ $attempt -ge $max_attempts ]; then
                 echo "❌ Maximum attempts reached. Exiting."
                 exit 1
             fi
@@ -325,19 +340,17 @@ check_ventoy_origin() {
         fi
 
         # Validate that index is in valid range (1 to count of devices)
-        local device_count=${#usb_devices[@]}
         if [ "$selected_index" -lt 1 ] || [ "$selected_index" -gt "$device_count" ]; then
             ((attempt++))
-            if [ $attempt -lt $max_attempts ]; then
-                echo "❌ Invalid index. Please select between 1 and $device_count"
-            else
+            echo "❌ Invalid selection. Please choose between $valid_choices"
+            if [ $attempt -ge $max_attempts ]; then
                 echo "❌ Maximum attempts reached. Exiting."
                 exit 1
             fi
             continue
         fi
 
-        # Get device at the selected index (convert 1-based to 0-based)
+        # Valid selection - get device at the selected index (convert 1-based to 0-based)
         local index=$((selected_index - 1))
         selected_device="${usb_devices[$index]}"
         break

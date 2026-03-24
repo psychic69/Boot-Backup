@@ -2,6 +2,46 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
+## [1.1.4] - 2026-03-23
+
+### Changed
+
+#### Device Selection UX - Major Improvements
+- **Shows available choices in prompt:** `Select USB drive by index number (1,2,3): `
+  - Users can see valid options without looking up at the list
+  - Eliminates confusion about what to enter
+
+- **Better error messages:** All errors show valid choices
+  - `❌ Invalid selection. Please choose between 1,2,3`
+  - Users know exactly what inputs are acceptable
+
+- **Guaranteed retry attempts:**
+  - Fixed logic to properly allow 2 attempts before exiting
+  - Users can correct mistakes (typos, wrong index)
+  - Previous bug caused script to exit silently
+
+- **Clearer error handling:**
+  - Checks for empty input separately
+  - Different messages for: non-numeric, out-of-range, empty
+  - No more silent exits
+
+### User Experience
+Before (v1.1.3):
+```
+Select USB drive by index number: 2
+[script exits with no message]
+```
+
+After (v1.1.4):
+```
+Select USB drive by index number (1): 2
+❌ Invalid selection. Please choose between 1
+Select USB drive by index number (1): 1
+[continues with valid selection]
+```
+
+---
+
 ## [1.1.3] - 2026-03-23
 
 ### Changed
