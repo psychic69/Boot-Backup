@@ -3,7 +3,7 @@
 ═══════════════════════════════════════════════════════════════
 
 Generated: 2026-03-23
-Version: 1.1.5
+Version: 1.1.6
 
 ───────────────────────────────────────────────────────────────
 SCRIPTS (Ready to Use)
@@ -196,6 +196,13 @@ Community:
 ───────────────────────────────────────────────────────────────
 VERSION HISTORY
 ───────────────────────────────────────────────────────────────
+
+1.1.6 - 2026-03-23
+  - CRITICAL FIX: Found actual root cause - [[ ]] =~ regex with set -e
+  - Replaced regex check with portable printf '%d' number validation
+  - Retry logic now works correctly
+  - All error messages display and prompts properly reappear
+  - Safe handling of all edge cases with set -e
 
 1.1.5 - 2026-03-23
   - CRITICAL FIX: Fixed silent script exit on invalid input

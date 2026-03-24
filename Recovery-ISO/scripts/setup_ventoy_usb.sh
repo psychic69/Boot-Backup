@@ -7,7 +7,7 @@
 
 set -e
 
-VERSION="1.1.5"
+VERSION="1.1.6"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source configuration file
@@ -323,24 +323,24 @@ check_ventoy_origin() {
     while true; do
         # Show prompt with available choices
         printf "Select USB drive by index number (%s): " "$valid_choices"
-        read -r selected_index || true
+        read -r selected_index || selected_index=""
 
         # Check if user entered anything
         if [ -z "$selected_index" ]; then
-            ((attempt++))
+            ((attempt++)) || true
             printf "❌ Please enter a valid choice (%s)\n" "$valid_choices"
-            if [ $attempt -ge $max_attempts ]; then
+            if [ "$attempt" -ge "$max_attempts" ]; then
                 printf "❌ Maximum attempts reached. Exiting.\n"
                 exit 1
             fi
             continue
         fi
 
-        # Validate that input is a number
-        if ! [[ "$selected_index" =~ ^[0-9]+$ ]]; then
-            ((attempt++))
-            printf "❌ Invalid input. Please enter a number from: %s\n" "$valid_choices"
-            if [ $attempt -ge $max_attempts ]; then
+        # Validate that input is a number (use [[ ]] more carefully)
+        if ! printf '%d' "$selected_index" >/dev/null 2>&1; then
+            ((attempt++)) || true
+            printf "❌ Invalid input '%s'. Please enter a number from: %s\n" "$selected_index" "$valid_choices"
+            if [ "$attempt" -ge "$max_attempts" ]; then
                 printf "❌ Maximum attempts reached. Exiting.\n"
                 exit 1
             fi
@@ -349,9 +349,9 @@ check_ventoy_origin() {
 
         # Validate that index is in valid range (1 to count of devices)
         if [ "$selected_index" -lt 1 ] || [ "$selected_index" -gt "$device_count" ]; then
-            ((attempt++))
-            printf "❌ Invalid selection. Please choose between %s\n" "$valid_choices"
-            if [ $attempt -ge $max_attempts ]; then
+            ((attempt++)) || true
+            printf "❌ Invalid selection '%s'. Please choose between %s\n" "$selected_index" "$valid_choices"
+            if [ "$attempt" -ge "$max_attempts" ]; then
                 printf "❌ Maximum attempts reached. Exiting.\n"
                 exit 1
             fi

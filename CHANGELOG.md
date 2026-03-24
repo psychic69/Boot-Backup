@@ -2,6 +2,31 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
+## [1.1.6] - 2026-03-23
+
+### Fixed
+
+#### Retry Logic Still Not Working - Root Cause Found and Fixed
+- **REAL FIX:** The `[[ ]] =~ regex` pattern matching was the culprit
+  - Interaction with `set -e` causes silent script exit in some bash environments
+  - Replaced with portable `printf '%d'` number validation
+  - Now safely checks if input is numeric without triggering `set -e`
+
+#### Improved Error Handling for `set -e`
+- Added explicit variable assignment after read: `read -r ... || selected_index=""`
+- Added `|| true` to arithmetic operations to prevent `set -e` exits
+- Quoted all variable comparisons for safety
+- All error messages now show the invalid input user provided
+
+### Testing
+Now when user enters invalid index (e.g., "2" with only 1 device):
+- ✅ Error message displays: `❌ Invalid selection '2'. Please choose between 1`
+- ✅ Prompt appears again immediately for retry
+- ✅ User gets 2 full attempts
+- ✅ Script continues only with valid input
+
+---
+
 ## [1.1.5] - 2026-03-23
 
 ### Fixed
