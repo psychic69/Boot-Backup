@@ -1094,7 +1094,15 @@ if [ "$VENTOY_FRESH_INSTALL" = false ] && [ -f "$VENTOY_MOUNT/CURRENT_VERSION" ]
         # Script version > installed version: UPGRADE NEEDED
         echo "  ⚠️  Script version is newer - upgrading..."
         echo
-        sync_and_unmount_ventoy
+
+        # Ensure Ventoy is unmounted before reinstalling
+        echo "Unmounting Ventoy partition..."
+        if umount "$VENTOY_MOUNT" 2>/dev/null; then
+            echo "✅ Ventoy unmounted successfully"
+        else
+            echo "⚠️  Ventoy already unmounted or in use, continuing..."
+        fi
+        echo
 
         echo "Re-installing Ventoy and SystemRescue with latest version..."
         echo
@@ -1105,9 +1113,12 @@ if [ "$VENTOY_FRESH_INSTALL" = false ] && [ -f "$VENTOY_MOUNT/CURRENT_VERSION" ]
         VENTOY_MOUNT=""
 
         # Scan and bootstrap Ventoy again
-        check_ventoy_origin
-        find_and_mount_ventoy
-        check_ventoy_space
+        echo "Starting fresh Ventoy installation..."
+        check_ventoy_origin || { echo "❌ Ventoy installation failed"; exit 1; }
+        find_and_mount_ventoy || { echo "❌ Failed to mount Ventoy"; exit 1; }
+        check_ventoy_space || { echo "❌ Insufficient space"; exit 1; }
+        echo "✅ Ventoy upgrade phase complete, continuing with setup..."
+        echo
     elif [ $cmp_result -eq 2 ]; then
         # Installed version > script version: DOWNGRADE NOT ALLOWED
         echo "  ❌ FATAL: Installed version ($installed_version) is newer than script ($VERSION)"
