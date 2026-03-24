@@ -1079,18 +1079,20 @@ check_ventoy_space
 
 # PREFLIGHT: Always check versions if Ventoy already exists
 # If version mismatch detected, unmount and trigger full reinstall
-if [ "$VENTOY_FRESH_INSTALL" = false ] && [ -f "$VENTOY_MOUNT/CURRENT_VERSION" ]; then
-    installed_version=$(cat "$VENTOY_MOUNT/CURRENT_VERSION")
+if [ "$VENTOY_FRESH_INSTALL" = "false" ] && [ -f "$VENTOY_MOUNT/CURRENT_VERSION" ]; then
+    installed_version=$(cat "$VENTOY_MOUNT/CURRENT_VERSION" 2>/dev/null)
 
-    echo "Checking version compatibility..."
-    echo "  Current installed version: $installed_version"
-    echo "  Script version:            $VERSION"
-    echo
+    if [ -n "$installed_version" ]; then
+        echo "Checking version compatibility..."
+        echo "  Current installed version: $installed_version"
+        echo "  Script version:            $VERSION"
+        echo
 
-    version_compare "$VERSION" "$installed_version"
-    cmp_result=$?
+        version_compare "$VERSION" "$installed_version" || true
+        cmp_result=$?
 
-    echo "DEBUG: cmp_result=$cmp_result (1=upgrade, 2=downgrade, 0=match)"
+        echo "DEBUG: cmp_result=$cmp_result (1=upgrade, 2=downgrade, 0=match)"
+    fi
 
     if [ $cmp_result -eq 1 ]; then
         # Script version > installed version: UPGRADE NEEDED
