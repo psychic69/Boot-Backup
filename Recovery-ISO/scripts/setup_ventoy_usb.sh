@@ -174,13 +174,46 @@ verify_sha256() {
     fi
 }
 
-# Version comparison helpers
-version_gt() {
-    [ "$(printf '%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ] && [ "$1" != "$2" ]
+# Version decoder: converts version string (e.g. "1.1.8") to numeric form for comparison
+# Returns: Space-separated major minor patch as zero-padded 3-digit numbers
+# Example: "1.1.8" → "001 001 008"
+version_decoder() {
+    local version="$1"
+    local major minor patch
+
+    # Split version by dots
+    IFS='.' read -r major minor patch <<< "$version"
+
+    # Handle missing parts (default to 0)
+    major=${major:-0}
+    minor=${minor:-0}
+    patch=${patch:-0}
+
+    # Output as zero-padded 3-digit numbers for numeric comparison
+    printf "%03d %03d %03d\n" "$major" "$minor" "$patch"
 }
 
+# Version comparison helpers
+# Returns 0 (true) if version1 > version2, 1 (false) otherwise
+version_gt() {
+    local v1_decoded=$(version_decoder "$1")
+    local v2_decoded=$(version_decoder "$2")
+
+    # Compare as strings (works because of zero-padding): "001 001 008" > "001 001 007"
+    [ "$v1_decoded" '>' "$v2_decoded" ]
+}
+
+# Returns 0 (true) if versions are equal, 1 (false) otherwise
 version_eq() {
     [ "$1" = "$2" ]
+}
+
+# Returns 0 (true) if version1 < version2, 1 (false) otherwise
+version_lt() {
+    local v1_decoded=$(version_decoder "$1")
+    local v2_decoded=$(version_decoder "$2")
+
+    [ "$v1_decoded" '<' "$v2_decoded" ]
 }
 
 # ============================================================================
@@ -952,6 +985,12 @@ check_versions() {
 
     echo "  Current installed version: $current_version"
     echo "  Script version:            $VERSION"
+    echo
+
+    # Debug: show version decoder output
+    local script_decoded=$(version_decoder "$VERSION")
+    local current_decoded=$(version_decoder "$current_version")
+    echo "  (Decoded: script=$script_decoded, current=$current_decoded)"
     echo
 
     if version_gt "$VERSION" "$current_version"; then
