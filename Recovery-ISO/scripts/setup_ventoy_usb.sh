@@ -7,7 +7,7 @@
 
 set -e
 
-VERSION="1.1.7"
+VERSION="1.1.8"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source configuration file

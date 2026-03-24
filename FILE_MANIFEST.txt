@@ -3,7 +3,7 @@
 ═══════════════════════════════════════════════════════════════
 
 Generated: 2026-03-23
-Version: 1.1.7
+Version: 1.1.8
 
 ───────────────────────────────────────────────────────────────
 SCRIPTS (Ready to Use)
@@ -196,6 +196,14 @@ Community:
 ───────────────────────────────────────────────────────────────
 VERSION HISTORY
 ───────────────────────────────────────────────────────────────
+
+1.1.8 - 2026-03-23
+  - CRITICAL FIX: Ventoy2Disk.sh invocation now runs from script directory
+  - Fixes PATH initialization: mkexfatfs and other tools now found correctly
+  - Added partition discovery delay after fresh Ventoy installation
+  - Fixed YES confirmation retry logic to handle empty input properly
+  - Unmounts stale Ventoy devices before mounting new ones
+  - Better error messages for mount conflicts and read-only issues
 
 1.1.7 - 2026-03-23
   - Smart default: Auto-select when only 1 USB drive (just press Enter)

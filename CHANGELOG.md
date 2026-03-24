@@ -2,6 +2,42 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
+## [1.1.8] - 2026-03-23
+
+### Fixed
+
+#### Ventoy2Disk.sh Invocation - Critical PATH Bug
+- **CRITICAL FIX:** Ventoy2Disk.sh now runs from its own directory for correct PATH setup
+  - Bug: Calling with absolute path caused `$OLDDIR` to point to wrong location
+  - Symptom: `mkexfatfs` and other Ventoy tools not found in PATH during installation
+  - Root cause: Ventoy2Disk.sh uses relative paths (`./tool/$TOOLDIR`) that broke when invoked from outside directory
+  - Fix: Changed invocation to `cd '${ventoy_dir}' && ./Ventoy2Disk.sh` for correct PATH initialization
+  - Impact: Ventoy installation now succeeds on all systems with proper tool discovery
+
+#### Partition Discovery Timing
+- Added 3-second delay and `partprobe` call after Ventoy installation
+  - Ensures kernel recognizes new partitions before script attempts to mount
+  - Prevents "partition not found" errors immediately after installation
+
+#### Confirmation Retry Logic
+- Fixed YES confirmation prompt to properly handle empty input (pressing Return)
+  - Changed from arithmetic-based loop to safer `while true` with manual increment
+  - Now allows 2 full attempts as intended instead of exiting on first wrong input
+  - Uses safer `read` with fallback to ensure empty input is handled
+
+#### Stale Mount Handling
+- Script now checks if `/mnt/disks/Ventoy` is mounted to a different device
+  - If mounted to old/stale device, unmounts it first before mounting new Ventoy
+  - Prevents "already mounted" or "read-only" errors from prior installations
+  - Safely handles cleanup of previous Ventoy USB configurations
+
+### UX Improvements
+- Clearer error messages when mount conflicts detected
+- Debug output shows partition detection attempts if mounting fails
+- More robust partition discovery after fresh Ventoy installation
+
+---
+
 ## [1.1.7] - 2026-03-23
 
 ### Changed
