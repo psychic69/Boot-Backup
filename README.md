@@ -716,6 +716,7 @@ For issues or questions:
 - SystemRescue project for the rescue environment
 - Ventoy project for the multi-boot USB solution
 - Community contributors and testers
+- Claude Code for rapid prototyping, complex regex handling, error trapping, documentation framework, and refactoring.
 
 ---
 
