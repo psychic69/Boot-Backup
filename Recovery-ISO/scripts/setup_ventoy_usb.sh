@@ -1154,8 +1154,10 @@ if [ "$VENTOY_FRESH_INSTALL" = "false" ] && [ -f "$VENTOY_MOUNT/CURRENT_VERSION"
         fi
 
         # Run Ventoy installer to OVERWRITE existing installation
-        echo "Running Ventoy2Disk.sh to reinstall Ventoy..."
-        if ! /bin/bash -c "cd '${ventoy_dir}' && ./Ventoy2Disk.sh -i '/dev/${VENTOY_DEVICE_NAME}'"; then
+        # Strip partition number to get the disk device (sdl1 -> sdl, nvme0n1p1 -> nvme0n1)
+        ventoy_disk="${VENTOY_DEVICE_NAME%[0-9]*}"
+        echo "Running Ventoy2Disk.sh to reinstall Ventoy on /dev/$ventoy_disk..."
+        if ! /bin/bash -c "cd '${ventoy_dir}' && ./Ventoy2Disk.sh -i '/dev/${ventoy_disk}'"; then
             echo "❌ Ventoy installation failed"
             rm -rf "$ventoy_dir" "$ventoy_tar" "$ventoy_sha"
             exit 1
@@ -1171,16 +1173,16 @@ if [ "$VENTOY_FRESH_INSTALL" = "false" ] && [ -f "$VENTOY_MOUNT/CURRENT_VERSION"
         echo "Waiting for system to recognize partitions..."
         sleep 2
         if command -v partprobe &> /dev/null; then
-            partprobe "/dev/$VENTOY_DEVICE_NAME" 2>/dev/null || true
+            partprobe "/dev/$ventoy_disk" 2>/dev/null || true
         fi
         sleep 1
 
-        # Now mount the freshly reinstalled Ventoy
-        VENTOY_DEVICE="/dev/$VENTOY_DEVICE_NAME"
+        # Now mount the freshly reinstalled Ventoy (partition 1)
+        VENTOY_DEVICE="/dev/${ventoy_disk}1"
         VENTOY_MOUNT="/mnt/disks/Ventoy"
         VENTOY_FRESH_INSTALL=true
 
-        echo "Mounting newly installed Ventoy..."
+        echo "Mounting newly installed Ventoy partition ($VENTOY_DEVICE)..."
         if ! mount "$VENTOY_DEVICE" "$VENTOY_MOUNT"; then
             echo "❌ Failed to mount Ventoy after reinstall"
             exit 1
