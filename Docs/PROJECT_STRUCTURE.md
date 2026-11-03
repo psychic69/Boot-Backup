@@ -117,7 +117,7 @@ unraid-boot-backup/
 ### Recovery USB (Ventoy)
 ```
 Ventoy USB/
-├── systemrescue-12.02-amd64.iso
+├── systemrescue-13.02-amd64.iso
 ├── UNRAID_RECOVERY_INSTRUCTIONS.txt
 ├── ventoy/
 │   └── ventoy.json
@@ -237,7 +237,7 @@ Configurable variables:
 - **Current Version:** 1.0.0 (pre-release)
 - **Unraid Compatibility:** 6.x and later
 - **BIOS Support:** UEFI only
-- **SystemRescue Version:** 12.02 (or later)
+- **SystemRescue Version:** 13.02 (or later)
 
 ---
 

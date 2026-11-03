@@ -7,8 +7,19 @@
 
 set -e
 
-VERSION="1.1.9"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Read script version from VERSION file (format: SCRIPT_VERSION=x.y.z)
+VERSION_FILE="${SCRIPT_DIR}/VERSION"
+if [[ ! -f "$VERSION_FILE" ]]; then
+    echo "❌ ERROR: VERSION file not found in $SCRIPT_DIR"
+    exit 1
+fi
+VERSION=$(sed -n 's/^SCRIPT_VERSION=//p' "$VERSION_FILE" | tr -d '[:space:]"')
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+    echo "❌ ERROR: invalid or missing SCRIPT_VERSION in $VERSION_FILE"
+    exit 1
+fi
 
 # Source configuration file
 INI_FILE="${SCRIPT_DIR}/setup_ventoy.ini"
@@ -552,7 +563,7 @@ find_and_mount_ventoy() {
 
         # Debug: Show what lsblk found
         if [ -z "$ventoy_info" ]; then
-            echo" Sleeping for 10 seconds to allow system to recognize new Ventoy USB..."
+            echo "Sleeping for 10 seconds to allow system to recognize new Ventoy USB..."
             sleep 10 
             echo "DEBUG: lsblk output with Ventoy label:"
             lsblk -b -P -o NAME,UUID,FSTYPE,SIZE,MOUNTPOINT,LABEL,TRAN 2>/dev/null | grep -i ventoy || echo "  (no matches)"
@@ -747,6 +758,7 @@ install_sysrescue_iso() {
             exit 1
         fi
     fi
+    remove_old_sysrescue_isos
     echo
 }
 
@@ -763,26 +775,21 @@ setup_recovery_scripts() {
 }
 
 # Function to create ventoy.json configuration
-create_ventoy_json() {
-    echo "Creating Ventoy configuration..."
-    local ventoy_dir="$VENTOY_MOUNT/ventoy"
-    mkdir -p "$ventoy_dir"
-
-    if [ -f "$ventoy_dir/ventoy.json" ]; then
-        echo "  ⚠️  ventoy.json already exists"
-        if ask_yes_no "  Overwrite with new ventoy.json?" "no"; then
-            cat > "$ventoy_dir/ventoy.json" << VENTOY_JSON_EOF
+# Format notes (https://www.ventoy.net/en/plugin_control.html):
+#   - Every control value must be a STRING ("30", not 30)
+#   - Each control key goes in its OWN object within the array
+#   - VTOY_DEFAULT_IMAGE selects the entry highlighted/booted after the timeout
+#   - control_uefi is the documented multi-mode suffix (xxx_uefi)
+write_ventoy_json() {
+    cat > "$1" << VENTOY_JSON_EOF
 {
   "control": [
-    {
-      "VTOY_DEFAULT_SEARCH_ROOT": "/",
-      "VTOY_MENU_TIMEOUT": 30
-    }
+    { "VTOY_DEFAULT_SEARCH_ROOT": "/" },
+    { "VTOY_MENU_TIMEOUT": "30" },
+    { "VTOY_DEFAULT_IMAGE": "/${SYSRESCUE_ISO}" }
   ],
   "control_uefi": [
-    {
-      "VTOY_LINUX_REMOUNT": "1"
-    }
+    { "VTOY_LINUX_REMOUNT": "1" }
   ],
   "menu_alias": [
     {
@@ -792,37 +799,34 @@ create_ventoy_json() {
   ]
 }
 VENTOY_JSON_EOF
+}
 
+create_ventoy_json() {
+    echo "Creating Ventoy configuration..."
+    local ventoy_dir="$VENTOY_MOUNT/ventoy"
+    local json="$ventoy_dir/ventoy.json"
+    mkdir -p "$ventoy_dir"
+
+    if [ -f "$json" ]; then
+        echo "  ⚠️  ventoy.json already exists"
+        if ask_yes_no "  Overwrite with new ventoy.json? (old one is saved as ventoy.json.bak)" "yes"; then
+            cp "$json" "$json.bak"
+            write_ventoy_json "$json"
             echo "  ✅ ventoy.json updated"
         else
             echo "  ⏭️  Keeping existing ventoy.json"
         fi
     else
-        cat > "$ventoy_dir/ventoy.json" << 'VENTOY_JSON_EOF'
-{
-  "control": [
-    {
-      "VTOY_DEFAULT_SEARCH_ROOT": "/",
-      "VTOY_MENU_TIMEOUT": 30
-    }
-  ],
-  "control_uefi": [
-    {
-      "VTOY_LINUX_REMOUNT": "1"
-    }
-  ],
-  "menu_alias": [
-    {
-      "image": "/systemrescue-12.02-amd64.iso",
-      "alias": "Unraid Recovery - SystemRescue"
-    }
-  ]
-}
-VENTOY_JSON_EOF
-
-        # Replace with actual ISO name
-        sed -i "s|/systemrescue-12.02-amd64.iso|/${SYSRESCUE_ISO}|g" "$ventoy_dir/ventoy.json"
+        write_ventoy_json "$json"
         echo "  ✅ ventoy.json created"
+    fi
+
+    # Sanity check: valid JSON and the ISO it references actually exists
+    if command -v python3 >/dev/null 2>&1 && ! python3 -m json.tool "$json" >/dev/null 2>&1; then
+        echo "  ❌ WARNING: $json is not valid JSON"
+    fi
+    if [ ! -f "$VENTOY_MOUNT/$SYSRESCUE_ISO" ]; then
+        echo "  ❌ WARNING: /$SYSRESCUE_ISO referenced in ventoy.json not found on USB"
     fi
     echo
 }
@@ -938,17 +942,14 @@ INSTRUCTIONS_EOF
 
 # Function to write current version to Ventoy
 write_current_version() {
-    if [ ! -f "$VENTOY_MOUNT/CURRENT_VERSION" ]; then
-        echo "$VERSION" > "$VENTOY_MOUNT/CURRENT_VERSION"
+    local previous=""
+    [ -f "$VENTOY_MOUNT/CURRENT_VERSION" ] && previous=$(tr -d '[:space:]' < "$VENTOY_MOUNT/CURRENT_VERSION")
+    echo "$VERSION" > "$VENTOY_MOUNT/CURRENT_VERSION"
+    if [ -z "$previous" ]; then
         echo "  ✅ CURRENT_VERSION created: $VERSION"
-    else
-        local current_ver=$(cat "$VENTOY_MOUNT/CURRENT_VERSION")
-        if [ "$current_ver" != "$VERSION" ]; then
-            echo "  ℹ️  CURRENT_VERSION already exists: $current_ver"
-            echo "      Script version: $VERSION"
-        fi
+    elif [ "$previous" != "$VERSION" ]; then
+        echo "  ✅ CURRENT_VERSION updated: $previous -> $VERSION"
     fi
-    echo
 }
 
 # Function to check and handle version upgrades
@@ -1059,6 +1060,220 @@ sync_and_unmount_ventoy() {
 }
 
 # ============================================================================
+# UPGRADE FUNCTIONS (in-place update; versions come from setup_ventoy.ini)
+# ============================================================================
+
+VENTOY_TOOL_DIR=""
+VENTOY_TAR=""
+VENTOY_SHA_FILE=""
+
+# Download, verify (SHA256) and extract the Ventoy release named in setup_ventoy.ini.
+# Sets VENTOY_TOOL_DIR. Exits on failure.
+download_ventoy() {
+    VENTOY_TAR="/var/tmp/ventoy-${VENTOY_VERSION}-linux.tar.gz"
+    VENTOY_SHA_FILE="/var/tmp/ventoy-sha256.txt"
+    VENTOY_TOOL_DIR="/var/tmp/ventoy-${VENTOY_VERSION}"
+
+    local avail_mb
+    avail_mb=$(df /var/tmp 2>/dev/null | awk 'NR==2 {print int($4/1024)}')
+    if [ -z "$avail_mb" ] || [ "$avail_mb" -lt 100 ]; then
+        echo "❌ ERROR: Insufficient space in /var/tmp for Ventoy download (${avail_mb:-?}MB free, need 100MB)"
+        exit 1
+    fi
+
+    echo "  Downloading Ventoy ${VENTOY_VERSION}..."
+    if ! wget -q -O "$VENTOY_TAR" "$VENTOY_DL_URL"; then
+        echo "❌ ERROR: Failed to download Ventoy ${VENTOY_VERSION}"
+        cleanup_ventoy_download
+        exit 1
+    fi
+    if ! wget -q -O "$VENTOY_SHA_FILE" "$VENTOY_DL_SHA"; then
+        echo "❌ ERROR: Failed to download Ventoy SHA256 file"
+        cleanup_ventoy_download
+        exit 1
+    fi
+    if ! verify_sha256 "$VENTOY_TAR" "$VENTOY_SHA_FILE"; then
+        echo "❌ ERROR: Ventoy SHA256 verification failed"
+        cleanup_ventoy_download
+        exit 1
+    fi
+    rm -rf "$VENTOY_TOOL_DIR"
+    if ! tar -xzf "$VENTOY_TAR" -C /var/tmp || [ ! -x "$VENTOY_TOOL_DIR/Ventoy2Disk.sh" ]; then
+        echo "❌ ERROR: Failed to extract Ventoy or Ventoy2Disk.sh is not executable"
+        cleanup_ventoy_download
+        exit 1
+    fi
+    echo "  ✅ Ventoy ${VENTOY_VERSION} downloaded and verified"
+}
+
+cleanup_ventoy_download() {
+    [ -n "$VENTOY_TOOL_DIR" ] && rm -rf "$VENTOY_TOOL_DIR"
+    [ -n "$VENTOY_TAR" ] && rm -f "$VENTOY_TAR"
+    [ -n "$VENTOY_SHA_FILE" ] && rm -f "$VENTOY_SHA_FILE"
+    return 0
+}
+
+# Work out the whole-disk device (e.g. sdl) behind the mounted Ventoy partition.
+# Prints the disk name, or nothing if it cannot be determined.
+resolve_ventoy_disk() {
+    local part="${VENTOY_DEVICE_NAME:-}"
+    if [ -z "$part" ]; then
+        part=$(findmnt -no SOURCE "$VENTOY_MOUNT" 2>/dev/null | sed 's|^/dev/||')
+    fi
+    [ -z "$part" ] && return 0
+    local disk
+    disk=$(lsblk -no PKNAME "/dev/$part" 2>/dev/null | head -1)
+    if [ -z "$disk" ]; then
+        disk="${part%[0-9]*}"   # fallback: sdl1 -> sdl
+    fi
+    echo "$disk"
+}
+
+# Read the Ventoy version installed on a disk (x.y.z) using the downloaded Ventoy2Disk.sh -l
+get_installed_ventoy_version() {
+    local disk="$1" out
+    out=$(/bin/bash -c "cd '${VENTOY_TOOL_DIR}' && ./Ventoy2Disk.sh -l '/dev/${disk}'" 2>&1) || true
+    local ver
+    ver=$(echo "$out" | grep -i 'version' | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)
+    if [ -z "$ver" ]; then
+        echo "  DEBUG: could not parse 'Ventoy2Disk.sh -l' output:" >&2
+        echo "$out" | sed 's/^/    /' >&2
+    fi
+    echo "$ver"
+}
+
+# Update Ventoy in place (-u keeps all files). Falls back to -I (ERASES THE DRIVE) only
+# after an explicit, default-no confirmation.
+update_ventoy_in_place() {
+    local disk="$1"
+    echo "  Unmounting Ventoy partition..."
+    umount "$VENTOY_MOUNT" 2>/dev/null || echo "  ⚠️  Ventoy already unmounted or in use, continuing..."
+
+    echo "  Running Ventoy2Disk.sh -u /dev/$disk (update in place, data preserved)..."
+    local ok=true
+    /bin/bash -c "cd '${VENTOY_TOOL_DIR}' && ./Ventoy2Disk.sh -u '/dev/${disk}'" || ok=false
+
+    if ! $ok; then
+        echo "  ❌ In-place update failed."
+        echo "     A full reinstall (-I) is possible, but it ERASES EVERYTHING on /dev/$disk."
+        if ask_yes_no "  Erase /dev/$disk and reinstall Ventoy ${VENTOY_VERSION}?" "no"; then
+            if ! /bin/bash -c "cd '${VENTOY_TOOL_DIR}' && ./Ventoy2Disk.sh -I '/dev/${disk}'"; then
+                echo "  ❌ Full reinstall failed"
+                cleanup_ventoy_download
+                exit 1
+            fi
+            VENTOY_FRESH_INSTALL=true
+        else
+            echo "  ℹ️  Aborting. Attempting to remount the unchanged USB..."
+            mount "/dev/${VENTOY_DEVICE_NAME:-${disk}1}" "$VENTOY_MOUNT" 2>/dev/null || true
+            cleanup_ventoy_download
+            exit 1
+        fi
+    fi
+
+    command -v partprobe >/dev/null 2>&1 && partprobe "/dev/$disk" 2>/dev/null || true
+    sleep 3
+
+    local part_dev="${VENTOY_DEVICE:-/dev/${disk}1}"
+    echo "  Mounting Ventoy partition ($part_dev)..."
+    if ! mount "$part_dev" "$VENTOY_MOUNT"; then
+        echo "  ❌ Failed to mount Ventoy after update"
+        cleanup_ventoy_download
+        exit 1
+    fi
+    echo "  ✅ Ventoy ${VENTOY_VERSION} in place and mounted"
+}
+
+# Preflight: decide what (if anything) needs upgrading on an existing Ventoy USB.
+#   1. Script version  (VERSION file  vs CURRENT_VERSION on USB)
+#   2. Ventoy version  (setup_ventoy.ini vs version installed on the disk)
+#   3. SystemRescue    (handled by install_sysrescue_iso: ISO name from setup_ventoy.ini)
+preflight_upgrade_check() {
+    [ "$VENTOY_FRESH_INSTALL" = "false" ] || return 0
+    echo "Checking for upgrades..."
+
+    # --- 1. Script version -------------------------------------------------
+    local installed_version="" rc=0
+    if [ -f "$VENTOY_MOUNT/CURRENT_VERSION" ]; then
+        installed_version=$(tr -d '[:space:]' < "$VENTOY_MOUNT/CURRENT_VERSION" 2>/dev/null)
+    fi
+    if [ -n "$installed_version" ]; then
+        echo "  Script version on USB:  $installed_version"
+        echo "  This script's version:  $VERSION"
+        version_compare "$VERSION" "$installed_version" || rc=$?
+        if [ $rc -eq 2 ]; then
+            echo "  ❌ FATAL: USB was set up by a newer script ($installed_version) than this one ($VERSION)."
+            echo "     Downgrade not permitted."
+            sync_and_unmount_ventoy
+            exit 1
+        elif [ $rc -eq 1 ]; then
+            echo "  ⬆️  Script is newer - configuration files will be refreshed and CURRENT_VERSION updated"
+        else
+            echo "  ✅ Script version matches"
+        fi
+    else
+        echo "  ℹ️  No CURRENT_VERSION on USB - it will be created"
+    fi
+
+    # --- 2. Ventoy version -------------------------------------------------
+    local disk
+    disk=$(resolve_ventoy_disk)
+    if [ -z "$disk" ]; then
+        echo "  ⚠️  Could not determine the USB disk device - skipping Ventoy version check"
+    else
+        download_ventoy
+        local installed_ventoy
+        installed_ventoy=$(get_installed_ventoy_version "$disk")
+        if [ -z "$installed_ventoy" ]; then
+            echo "  ⚠️  Could not read installed Ventoy version - skipping Ventoy update"
+        else
+            echo "  Ventoy installed:       $installed_ventoy"
+            echo "  Ventoy in ini:          $VENTOY_VERSION"
+            rc=0
+            version_compare "$VENTOY_VERSION" "$installed_ventoy" || rc=$?
+            if [ $rc -eq 1 ]; then
+                echo "  ⬆️  Ventoy on USB is older than $VENTOY_VERSION"
+                if ask_yes_no "  Update Ventoy $installed_ventoy -> $VENTOY_VERSION in place (files are kept)?" "yes"; then
+                    update_ventoy_in_place "$disk"
+                else
+                    echo "  ⏭️  Keeping Ventoy $installed_ventoy"
+                fi
+            elif [ $rc -eq 2 ]; then
+                echo "  ⚠️  Installed Ventoy ($installed_ventoy) is NEWER than setup_ventoy.ini ($VENTOY_VERSION)"
+                echo "     Not downgrading. Update VENTOY_VERSION in setup_ventoy.ini if this is intended."
+            else
+                echo "  ✅ Ventoy is up to date"
+            fi
+        fi
+        cleanup_ventoy_download
+    fi
+    echo
+}
+
+# Remove SystemRescue ISOs (and .sha512 files) left over from previous versions.
+# Only runs once the current ISO is confirmed present on the USB.
+remove_old_sysrescue_isos() {
+    [ -f "$VENTOY_MOUNT/$SYSRESCUE_ISO" ] || return 0
+    local f old=()
+    for f in "$VENTOY_MOUNT"/systemrescue-*.iso "$VENTOY_MOUNT"/systemrescue-*.iso.sha512; do
+        [ -e "$f" ] || continue
+        case "$(basename "$f")" in
+            "$SYSRESCUE_ISO"|"$SYSRESCUE_SHA512") ;;
+            *) old+=("$f") ;;
+        esac
+    done
+    [ ${#old[@]} -eq 0 ] && return 0
+    echo "  Older SystemRescue files found on USB:"
+    for f in "${old[@]}"; do echo "    - $(basename "$f")"; done
+    if ask_yes_no "  Remove them (current: $SYSRESCUE_ISO)?" "yes"; then
+        rm -f "${old[@]}"
+        echo "  ✅ Removed old SystemRescue files"
+    else
+        echo "  ⏭️  Keeping old files"
+    fi
+}
+
+# ============================================================================
 # VALIDATION
 # ============================================================================
 
@@ -1077,132 +1292,7 @@ check_ventoy_origin
 find_and_mount_ventoy
 check_ventoy_space
 
-# PREFLIGHT: Always check versions if Ventoy already exists
-# If version mismatch detected, unmount and trigger full reinstall
-if [ "$VENTOY_FRESH_INSTALL" = "false" ] && [ -f "$VENTOY_MOUNT/CURRENT_VERSION" ]; then
-    installed_version=$(cat "$VENTOY_MOUNT/CURRENT_VERSION" 2>/dev/null)
-
-    if [ -n "$installed_version" ]; then
-        echo "Checking version compatibility..."
-        echo "  Current installed version: $installed_version"
-        echo "  Script version:            $VERSION"
-        echo
-
-        set +e
-        version_compare "$VERSION" "$installed_version"
-        cmp_result=$?
-        set -e
-
-        echo "DEBUG: cmp_result=$cmp_result (1=upgrade, 2=downgrade, 0=match)"
-    fi
-
-    if [ $cmp_result -eq 1 ]; then
-        # Script version > installed version: UPGRADE NEEDED
-        echo "  ⚠️  Script version is newer - upgrading..."
-        echo
-
-        # Ensure Ventoy is unmounted before reinstalling
-        echo "Unmounting Ventoy partition..."
-        if umount "$VENTOY_MOUNT" 2>/dev/null; then
-            echo "✅ Ventoy unmounted successfully"
-        else
-            echo "⚠️  Ventoy already unmounted or in use, continuing..."
-        fi
-        echo
-
-        echo "Re-installing Ventoy to /dev/$VENTOY_DEVICE_NAME (overwriting existing)..."
-        echo
-
-        # Directly run Ventoy2Disk.sh to force reinstall (not just re-mount)
-        ventoy_dir="/var/tmp/ventoy-${VENTOY_VERSION}"
-        ventoy_script="$ventoy_dir/Ventoy2Disk.sh"
-
-        # Check /var/tmp space
-        avail_mb=$(df /var/tmp 2>/dev/null | awk 'NR==2 {print int($4/1024)}')
-        if [ -z "$avail_mb" ] || [ "$avail_mb" -lt 100 ]; then
-            echo "❌ ERROR: Insufficient space in /var/tmp for Ventoy download"
-            exit 1
-        fi
-
-        # Download and verify Ventoy
-        echo "Downloading Ventoy ${VENTOY_VERSION}..."
-        ventoy_tar="/var/tmp/ventoy-${VENTOY_VERSION}-linux.tar.gz"
-        if ! wget -O "$ventoy_tar" "$VENTOY_DL_URL" 2>&1 | tail -3; then
-            echo "❌ Failed to download Ventoy"
-            exit 1
-        fi
-
-        echo "Verifying Ventoy integrity..."
-        ventoy_sha="/var/tmp/ventoy-sha256.txt"
-        if ! wget -O "$ventoy_sha" "$VENTOY_DL_SHA" 2>&1 | tail -1; then
-            echo "❌ Failed to download SHA256"
-            rm -f "$ventoy_tar"
-            exit 1
-        fi
-
-        if ! verify_sha256 "$ventoy_tar" "$ventoy_sha"; then
-            echo "❌ SHA256 verification failed"
-            rm -f "$ventoy_tar" "$ventoy_sha"
-            exit 1
-        fi
-
-        echo "Extracting Ventoy..."
-        if ! tar -xzf "$ventoy_tar" -C /var/tmp; then
-            echo "❌ Extraction failed"
-            rm -f "$ventoy_tar" "$ventoy_sha"
-            exit 1
-        fi
-
-        # Run Ventoy installer to OVERWRITE existing installation
-        # Strip partition number to get the disk device (sdl1 -> sdl, nvme0n1p1 -> nvme0n1)
-        ventoy_disk="${VENTOY_DEVICE_NAME%[0-9]*}"
-        echo "Running Ventoy2Disk.sh to reinstall Ventoy on /dev/$ventoy_disk..."
-        if ! /bin/bash -c "cd '${ventoy_dir}' && ./Ventoy2Disk.sh -I '/dev/${ventoy_disk}'"; then
-            echo "❌ Ventoy installation failed"
-            rm -rf "$ventoy_dir" "$ventoy_tar" "$ventoy_sha"
-            exit 1
-        fi
-
-        echo "✅ Ventoy reinstalled successfully"
-        echo
-
-        # Cleanup
-        rm -rf "$ventoy_dir" "$ventoy_tar" "$ventoy_sha"
-
-        # Wait for system to recognize new partitions
-        echo "Waiting for system to recognize partitions..."
-        sleep 2
-        if command -v partprobe &> /dev/null; then
-            partprobe "/dev/$ventoy_disk" 2>/dev/null || true
-        fi
-        sleep 1
-
-        # Now mount the freshly reinstalled Ventoy (partition 1)
-        VENTOY_DEVICE="/dev/${ventoy_disk}1"
-        VENTOY_MOUNT="/mnt/disks/Ventoy"
-        VENTOY_FRESH_INSTALL=true
-
-        echo "Mounting newly installed Ventoy partition ($VENTOY_DEVICE)..."
-        if ! mount "$VENTOY_DEVICE" "$VENTOY_MOUNT"; then
-            echo "❌ Failed to mount Ventoy after reinstall"
-            exit 1
-        fi
-
-        echo "✅ Ventoy reinstallation and mount complete"
-        echo "Continuing with SystemRescue ISO installation..."
-        echo
-    elif [ $cmp_result -eq 2 ]; then
-        # Installed version > script version: DOWNGRADE NOT ALLOWED
-        echo "  ❌ FATAL: Installed version ($installed_version) is newer than script ($VERSION)"
-        echo "     Downgrade not permitted."
-        sync_and_unmount_ventoy
-        exit 1
-    else
-        # Versions match: continue normally
-        echo "  ✅ Versions match - proceeding with standard setup"
-        echo
-    fi
-fi
+preflight_upgrade_check
 
 install_sysrescue_iso
 setup_recovery_scripts

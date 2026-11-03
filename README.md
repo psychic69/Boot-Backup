@@ -41,7 +41,7 @@ This separation ensures you never accidentally reformat your backup USB during r
    - If pre-installed, script will configure it automatically
 
 3. **(Optional) SystemRescue ISO**
-   - Recommended version: 12.02 or later
+   - Recommended version: 13.02 or later
    - If not provided, the setup script will automatically download it
 
 ### Software Requirements
@@ -286,13 +286,13 @@ These documents include:
 **What it does:**
 - **Detects existing Ventoy** or automatically installs it from scratch if not present
 - **Scans all USB drives** (unpartitioned, labeled, unlabeled) excluding UNRAID/UNRAID_DR, requiring ≥2GB size
-- Downloads and installs Ventoy 1.1.10 with SHA256 verification if needed
+- Downloads and installs Ventoy 1.1.18 with SHA256 verification if needed
 - Downloads SystemRescue ISO with SHA512 verification (if not present)
 - Creates `ventoy.json` with proper UEFI remount settings (`VTOY_LINUX_REMOUNT: "1"`)
 - Copies `move_dr_to_unraid.sh` recovery script to USB
 - Generates `UNRAID_RECOVERY_INSTRUCTIONS.txt` for users
 - **Tracks version** with CURRENT_VERSION file for upgrade management
-- Supports `-upgrade` flag for updating existing Ventoy USBs to newer script versions
+- Upgrades existing USBs **in place** on every run, driven by `setup_ventoy.ini`: an older Ventoy is updated with `Ventoy2Disk.sh -u` (files kept) and a new SystemRescue ISO replaces the old one. A full wipe (`-I`) is only offered as a default-no fallback if the in-place update fails
 
 **When to run:**
 - Once during initial setup
@@ -301,7 +301,7 @@ These documents include:
 **What gets created on Ventoy USB:**
 ```
 Ventoy USB/
-├── systemrescue-12.02-amd64.iso
+├── systemrescue-13.02-amd64.iso
 ├── UNRAID_RECOVERY_INSTRUCTIONS.txt
 ├── CURRENT_VERSION
 ├── ventoy/
@@ -419,7 +419,7 @@ Ventoy USB/
 
 ```
 Ventoy USB/
-├── systemrescue-12.02-amd64.iso
+├── systemrescue-13.02-amd64.iso
 ├── UNRAID_RECOVERY_INSTRUCTIONS.txt
 ├── CURRENT_VERSION                    (tracks script version for upgrades)
 ├── ventoy/

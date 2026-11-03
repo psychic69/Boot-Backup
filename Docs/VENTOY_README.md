@@ -29,7 +29,7 @@ The script will:
 
 ```
 Ventoy USB/
-├── systemrescue-12.02-amd64.iso
+├── systemrescue-13.02-amd64.iso
 ├── UNRAID_RECOVERY_INSTRUCTIONS.txt
 ├── ventoy/
 │   └── ventoy.json (auto-created)
@@ -45,19 +45,16 @@ to make booting easier.
 ```json
 {
   "control": [
-    {
-      "VTOY_DEFAULT_SEARCH_ROOT": "/",
-      "VTOY_MENU_TIMEOUT": 30
-    }
+    { "VTOY_DEFAULT_SEARCH_ROOT": "/" },
+    { "VTOY_MENU_TIMEOUT": "30" },
+    { "VTOY_DEFAULT_IMAGE": "/systemrescue-13.02-amd64.iso" }
   ],
   "control_uefi": [
-    {
-      "VTOY_LINUX_REMOUNT": "1"
-    }
+    { "VTOY_LINUX_REMOUNT": "1" }
   ],
   "menu_alias": [
     {
-      "image": "/systemrescue-12.02-amd64.iso",
+      "image": "/systemrescue-13.02-amd64.iso",
       "alias": "Unraid Recovery - SystemRescue"
     }
   ]
@@ -70,7 +67,7 @@ to make booting easier.
 - Searches for ISOs in the root of the USB drive
 - Keeps things simple and organized
 
-**`VTOY_MENU_TIMEOUT: 30`**
+**`VTOY_MENU_TIMEOUT: "30"`** (values must be strings; one key per object)
 - Gives users 30 seconds to select an option
 - Auto-boots first entry if no selection made
 

@@ -2,6 +2,40 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
+## [1.2.0] - 2026-11-03
+
+### Changed
+- `setup_ventoy_usb.sh` now reads the script version from `Recovery-ISO/scripts/VERSION`
+  (`SCRIPT_VERSION=x.y.z`) instead of a hardcoded `VERSION="1.1.9"`
+  - Value is extracted with `sed` (file is not sourced) and validated as `x.y` or `x.y.z`
+  - Script exits with a clear error if the file is missing or invalid
+  - `VERSION` file now ends with a trailing newline
+- **In-place upgrades driven by `setup_ventoy.ini`** (replaces the wipe-on-version-bump flow):
+  - Every run on an existing USB now checks the installed Ventoy (`Ventoy2Disk.sh -l`) against
+    `VENTOY_VERSION`; if older, it updates with `Ventoy2Disk.sh -u` (files on the USB are kept)
+  - If `-u` fails, a full reinstall (`-I`, ERASES the drive) is offered only after a default-no confirmation
+  - An installed Ventoy newer than the ini is never downgraded (warning only)
+  - SystemRescue: when the ISO named by `SYSRESCUE_VER` differs from what is on the USB, the new ISO is
+    downloaded/verified and older `systemrescue-*.iso` / `.sha512` files are removed (with confirmation)
+  - Script `VERSION` vs `CURRENT_VERSION` is still compared: newer refreshes config and updates
+    `CURRENT_VERSION`; an older script than the USB is a fatal downgrade error
+  - `write_current_version` now always writes the current version (previously never updated an existing file)
+  - New helpers: `download_ventoy`, `resolve_ventoy_disk`, `get_installed_ventoy_version`,
+    `update_ventoy_in_place`, `preflight_upgrade_check`, `remove_old_sysrescue_isos`
+  - Fixed a typo (`echo"`) in the "Sleeping for 10 seconds" message that would abort the script
+- Fixed `ventoy.json` generation so Ventoy honors it (`create_ventoy_json`):
+  - Control values are now strings (`"30"`, was number `30`), as Ventoy requires
+  - Each control key is in its own object (was several keys in one object)
+  - Added `VTOY_DEFAULT_IMAGE` so the SystemRescue entry is the default selection
+  - Overwrite prompt now defaults to yes and saves the old file as `ventoy.json.bak`
+    (previously a stale file was kept by default)
+  - Removed duplicated heredoc/`sed` branch with hardcoded ISO name; JSON is validated after writing
+- Updated bundled software versions in `setup_ventoy.ini`:
+  - Ventoy: `1.1.18`
+  - SystemRescue: `13.02`
+- Updated `FILE_MANIFEST.txt` to 1.2.0 and listed the `VERSION` file
+- Existing USBs with `CURRENT_VERSION` below 1.2.0 will go through the upgrade path
+
 ## [1.1.9] - 2026-03-24
 
 ### Fixed

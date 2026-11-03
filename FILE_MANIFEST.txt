@@ -2,8 +2,8 @@
   UNRAID BOOT BACKUP SUITE - COMPLETE FILE MANIFEST
 ═══════════════════════════════════════════════════════════════
 
-Generated: 2026-03-24
-Version: 1.1.9
+Generated: 2026-11-03
+Version: 1.2.0
 
 ───────────────────────────────────────────────────────────────
 SCRIPTS (Ready to Use)
@@ -13,6 +13,7 @@ SCRIPTS (Ready to Use)
 ✓ dr_usb_backup.sh              (Not included - part of main project)
 ✓ setup_ventoy_usb.sh           Script to create recovery USB (with Ventoy bootstrap)
 ✓ setup_ventoy.ini              Configuration file (versions, URLs, parameters)
+✓ VERSION                       Single source of truth for script version (SCRIPT_VERSION=x.y.z)
 ✓ move_dr_to_unraid.sh          Emergency recovery script
 
 ───────────────────────────────────────────────────────────────
@@ -55,6 +56,7 @@ Root Directory:
   Recovery-ISO/scripts/:
     setup_ventoy_usb.sh         ← Recovery USB creation (with Ventoy bootstrap)
     setup_ventoy.ini            ← Configuration file
+    VERSION                     ← Script version (read by setup_ventoy_usb.sh)
     move_dr_to_unraid.sh        ← Emergency recovery script
     (+ legacy scripts in historical/)
 
@@ -147,6 +149,7 @@ docs/PROJECT_STRUCTURE.md        11 KB
 
 setup_ventoy_usb.sh              32 KB (includes Ventoy bootstrap)
 setup_ventoy.ini                  1 KB
+VERSION                         < 1 KB
 move_dr_to_unraid.sh              7 KB
 
 Total Documentation Size:        ~96 KB
@@ -196,6 +199,19 @@ Community:
 ───────────────────────────────────────────────────────────────
 VERSION HISTORY
 ───────────────────────────────────────────────────────────────
+
+1.2.0 - 2026-11-03
+  - setup_ventoy_usb.sh now reads its version from scripts/VERSION
+    (SCRIPT_VERSION=x.y.z) instead of a hardcoded value
+  - Script exits with an error if VERSION is missing or malformed
+  - VERSION file parsed with sed (never sourced)
+  - Added VERSION to the file manifest
+  - In-place upgrades from setup_ventoy.ini: Ventoy via Ventoy2Disk.sh -u (data kept), new
+    SystemRescue ISO replaces old; full wipe (-I) only as default-no fallback; no Ventoy downgrade
+  - CURRENT_VERSION is now always updated; fixed echo typo that aborted the script
+  - Fixed ventoy.json generation (string values, one key per object, VTOY_DEFAULT_IMAGE, backup on overwrite)
+  - Updated software versions in setup_ventoy.ini: Ventoy 1.1.18, SystemRescue 13.02
+  - NOTE: USBs with CURRENT_VERSION < 1.2.0 will trigger the upgrade path
 
 1.1.9 - 2026-03-24
   - CRITICAL FIX: Moved version check to preflight (after mount, before setup)
