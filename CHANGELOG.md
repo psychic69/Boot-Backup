@@ -5,11 +5,140 @@ All notable changes to the Unraid Boot Backup Suite are documented in this file.
 ## [1.2.0] - 2026-11-03
 
 ### Changed
-- `setup_ventoy_usb.sh` now reads the script version from `Recovery-ISO/scripts/VERSION`
-  (`SCRIPT_VERSION=x.y.z`) instead of a hardcoded `VERSION="1.1.9"`
+- `setup_ventoy_usb.sh` now reads the script version from the release `VERSION` file at the repo root
+  (`SCRIPT_VERSION=x.y.z`, two folders above the script) instead of a hardcoded `VERSION="1.1.9"`
   - Value is extracted with `sed` (file is not sourced) and validated as `x.y` or `x.y.z`
   - Script exits with a clear error if the file is missing or invalid
   - `VERSION` file now ends with a trailing newline
+- **`dr_usb_backup.sh -remote`: mirror the running USB to a remote server over SSH**
+  - New flag `-remote` backs up `/boot` to another machine instead of the local UNRAID_DR USB;
+    without the flag the existing local behavior is unchanged
+  - Settings in `remote.ini` (template: `remote.ini.example`, default location
+    `/boot/config/plugins/dr_usb/remote.ini`, overridable via `REMOTE_INI` in the script)
+  - 1:1 mirror (`rsync -rlth --delete-after`), no snapshots
+  - SSH hardening: dedicated key, pinned `known_hosts`, `StrictHostKeyChecking=yes`, `BatchMode`;
+    the private key is copied from the (FAT) flash drive to RAM with 600 permissions and removed on exit
+  - Safety checks: `/boot` must be mounted with `config/` and `bzroot` before mirroring with `--delete`;
+    all ini values validated; `flock` prevents overlapping runs
+  - Remote preflight (rsync probe push to the rrsync-restricted destination, plus a check that the key cannot run
+    commands; see "Hash checks, and a locked-down remote destination" below) and optional Unraid notification on failure
+  - Documentation: full Remote Backup guide in `Docs/dr_usb_backup.md` (file locations, `remote.ini` variable
+    reference, step-by-step key/user/known_hosts setup on both servers, scheduling, troubleshooting, restore);
+    cross-referenced from `README.md`, `INDEX.md`, `GETTING_STARTED.md` and `Docs/PROJECT_STRUCTURE.md`
+  - `Docs/PROJECT_STRUCTURE.md` repository layout corrected to match the actual folders; added `setup_ventoy.ini`,
+    `VERSION`, `remote.ini` and the in-place upgrade behavior
+  - `GETTING_STARTED.md`: optional remote backup section, remote test/commands, upgrade instructions updated
+- **One release archive, shared modules and a universal settings file**
+  - Single release: the whole project (backup tools plus the recovery USB tools) now ships as
+    `Boot-Backup-<version>.tar.gz`, built by the new `build_release.sh` (syntax-checks everything, writes a `.sha256`)
+    and attached to a GitHub Release. Extract it into `/boot/config/plugins/` (with `--no-same-owner --no-same-permissions`);
+    upgrading never overwrites `dr_usb.ini`, `remote.ini` or SSH keys because they are not in the archive
+  - One `VERSION` file at the repo root (moved from `Recovery-ISO/scripts/VERSION`) is the version for the whole release;
+    `setup_ventoy_usb.sh` now reads it from two folders above itself
+  - Shared code moved from `dr_usb_create.sh` / `dr_usb_backup.sh` into `lib/` (`logging.sh`, `drives.sh`, `clone.sh`,
+    `config.sh`): eleven functions were byte-identical copies in both scripts and `clone_backup` alone was 191 duplicated
+    lines. Behavior is unchanged; each fix now exists once. The scripts stop with a clear message if `lib/` is missing
+    (so the old "paste the script into User Scripts" install no longer works; User Scripts now just calls the script on the flash drive)
+  - New `dr_usb.ini` (template `dr_usb.ini.example`) replaces the "edit these values" block inside both scripts:
+    `LOG_DIR`, `SNAPSHOTS`, `RETENTION_DAYS`, `CLONE_MP`, optional `REMOTE_INI`. All have built-in defaults, the file is optional,
+    and `remote.ini` now defaults to beside the scripts
+  - `dr_usb_create.sh` writes its own log, `usb-create-DATE.log`, separate from `boot-check-*.log`; when a new create log is
+    written, earlier create logs that finished successfully are removed (failed ones are kept)
+  - `log_message` before logging starts now prints to stderr only for both scripts (create no longer also writes `/tmp/dr_usb_create.log`)
+  - Automated tests: `Unit Test/run_tests.sh` runs 16 `test_*.sh` files (modules, USB menu, format logic with stubbed disk tools,
+    startup checks, remote config, create/backup end to end against sample `lsblk` data in `Unit Test/fixtures/`, and the release build)
+  - Docs updated for the new install (extract the archive; User Script becomes a one-line wrapper) and settings
+- **New `Docs/TEST_CHECKLIST_v1.2.0.md`:** a hands-on test plan for this release, ordered from safest to riskiest, with the
+  expected messages, failure drills on backups only, and a results table
+- **New `Docs/DESIGN_DECISIONS.md`:** a versioned journal of *why* things are built the way they are (decisions, reasons,
+  alternatives rejected, Unraid facts relied on, parked ideas). Separate from this changelog, which says what changed
+- **`dr_usb_scrub.sh`: maintenance scrub (new)**
+  - `dr_usb_scrub.sh` always verifies the live `/boot` and `/boot/previous` against Unraid's `.sha256` files;
+    `dr_usb_scrub.sh -backup` also checks the backup, chosen by `remote.ini` (present -> the remote mirror, absent -> the
+    local `UNRAID_DR` USB). Read-only; designed to be scheduled weekly/monthly, separately from the backup
+  - Live-versus-backup differences are never reported (the backup is for DR, not a perfect sync). The local USB is checked
+    on its own terms (Unraid's hashes plus `DR_MANIFEST.sums`, the same checks the restore makes). The remote mirror is
+    compared with an rsync checksum dry run limited to the Unraid-hashed files, which works with the write-only `rrsync` key
+    because the destination only reports what differs
+  - A failing scrub is loud and specific: a banner, then per problem the area (`LIVE /boot`, `BACKUP USB`, `REMOTE MIRROR`),
+    the file, the problem, the full expected and actual hash and the size, then what to do; non-zero exit and an Unraid
+    notification. Everything is also written to `scrub-*.log` (rotated with `SNAPSHOTS` / `RETENTION_DAYS`)
+  - The backup's preflight uses the same shared check (`verify_boot_hashes`), so its failures now carry the same detail
+    (full expected/actual hashes and size) as the scrub
+  - New shared module `lib/remote.sh` (remote config, SSH key staging, the rrsync checks) used by the backup and the scrub;
+    `notify_failure` moved to `lib/logging.sh`
+  - New `Unit Test/test_scrub.sh` (75 checks) and a new guide `Docs/dr_usb_scrub.md`
+- **Hash checks, and a locked-down remote destination** (pipelined with the items below)
+  - **Source check before every backup (hard stop).** New `lib/integrity.sh`: `verify_boot_hashes` checks every file in
+    `/boot` AND `/boot/previous` that has a `.sha256` sibling (`bzimage`, `bzroot`, `bzmodules`, `bzfirmware`,
+    `bzroot-gui`, `memtest`; Unraid's files hold a bare 64-character hash) and stops the run on any mismatch, a missing
+    required file (`bzimage`, `bzroot`, `bzmodules`), or a `.sha256` whose file is gone. Runs at the start of
+    `clone_backup` (local backup and the first backup in `dr_usb_create.sh`) and in `-remote` before anything is sent, so a
+    damaged flash drive can never overwrite a good backup. A file with no `.sha256`, or an unparsable one, only warns
+  - **Backup manifest.** After each local backup `DR_MANIFEST.sums` is written onto the `UNRAID_DR` USB: SHA-256 of every
+    file except those Unraid already hashes, `ldlinux.sys`/`ldlinux.c32` (the syslinux install rewrites them), the
+    `BACKUP-*` marker, `logs/`, `.git/` and `System Volume Information/`. It is written last, in the backup's final state
+    (after the `EFI-` rename); an old manifest is removed first so a failure never leaves a stale one. (The name avoids
+    both `BACKUP-*`, which finds the marker, and `*.sha256`, which Unraid's hash files use)
+  - **Restore check.** `move_dr_to_unraid.sh` verifies the backup's root and `previous/` against Unraid's `.sha256` files and
+    the rest against `DR_MANIFEST.sums` while the backup is still mounted read-only. Failures are listed in the summary
+    (first 20, then a count) and the user must type `OVERRIDE` before the normal `RESTORE` prompt; Enter cancels. A backup
+    with no manifest only warns. `bzmodules` is now a required file of a complete flash backup
+  - **`-remote` now REQUIRES `rrsync` on the destination.** The key must be locked with
+    `restrict,from="<ip>",command="rrsync -wo <folder>"`: rsync only, write-only, one folder, no shell. `REMOTE_DIR` is
+    gone from `remote.ini` (an old line is ignored with a warning); the folder is fixed on the server. The SSH-command
+    preflight (`mkdir`, `test -w`, `command -v rsync`) is replaced by a small rsync probe push, followed by an
+    enforcement check: if the same key can run `ssh <host> true`, the script refuses to run. In `-debug` the probe is a dry run
+  - New tests: `test_integrity.sh` (52), `test_remote_flow.sh` (39), and 40 more checks in `test_move_dr.sh` (now 148)
+  - Docs: the remote guide is rewritten for rrsync, with a security-model section (root locally, a deliberately weak
+    destination key, snapshots and a firewall on the destination to protect the mirror itself), new troubleshooting rows
+    and a restore-from-mirror procedure that uses an administrator account on the destination, because the backup key is write-only
+- **`move_dr_to_unraid.sh` (emergency restore) rewritten: safer, verified, and self-contained**
+  - Stops depending on Unraid's `make_bootable_linux` wrapper. That wrapper hands the real work to
+    `syslinux/make_bootable_linux.sh`, which always `exit 0`s (so failures were invisible), asks an interactive
+    Y/N, needs `mtools`/`sudo`, and unmounts a mount the old script was still standing in. The new script does the same
+    steps itself, using the `syslinux_linux` and `mbr.bin` stored on the backup (so they match that Unraid release):
+    relabel `UNRAID_DR` to `UNRAID`, rename `EFI-` to `EFI` (UEFI boot), `syslinux_linux -f --install <partition>`,
+    and write the MBR
+  - Read-only checks first, before anything is changed: root and tools present, no `UNRAID` drive, exactly one USB
+    `UNRAID_DR` on its first partition, the partition is unmounted (the old script ignored a failed unmount), and the
+    backup is a complete flash (`bzimage`, `bzroot`, `config/`, `syslinux/*`); `mbr.bin` must be 440-447 bytes
+    (Unraid's is 447: its last byte is the partition-1 active flag) so it can never overwrite the partition table
+  - Shows the drive, model, size and the last-backup time (from the `BACKUP-*` marker) and requires typing `RESTORE`
+    (Enter cancels). Before this point nothing has been changed
+  - Every step is checked and the result is verified (label, EFI folder, MBR read back byte-for-byte); if any step
+    fails after the relabel, the label and `EFI` folder are put back so the USB is a normal `UNRAID_DR` backup again and
+    the script can be re-run. Rebooting with the restored drive remains the point of no return
+  - No more `eval` on device labels (a crafted label could run commands as root), and no stale transport value
+    carried between loop iterations; ends with a license-replacement reminder
+  - New `Unit Test/test_move_dr.sh` (106 checks, all disk tools stubbed, devices are plain files)
+  - The recovery instructions text written by `setup_ventoy_usb.sh` and the README/guides describe the new prompts
+- **`dr_usb_create.sh`: safer, failures no longer hidden** (first pass)
+  - Masked failures fixed (same `cmd | while read` bug as `dr_usb_backup.sh`): `wipefs`, `sfdisk`, `partprobe`,
+    `mkfs.vfat`, `mount`, `umount` and `rsync` now report their own exit status; rsync is built as an array
+    (no `eval`) and exit 24 is treated as success; `wipefs`, `sfdisk` and `mkfs.vfat` failures now stop the run
+  - Any partition of the target drive that is mounted (e.g. auto-mounted by Unassigned Devices) is unmounted before
+    wiping; if that fails nothing is changed, and a device mounted at `/boot` is refused
+  - `-debug` and `-lsblk` no longer wipe/format anything: after the prompts the script logs what it would do and exits
+  - Script now ends with a completed / finished-WITH-ERRORS message and exits non-zero on failure
+  - **New USB drive menu (second pass):** every USB disk is now listed, including blank/unpartitioned and unlabeled
+    drives (previously only drives with a labeled partition appeared, so new sticks were never found)
+    - Drives that already contain partitions, labels or a filesystem are marked `*` and their partitions are listed;
+      the list is repeated in the FORMAT confirmation
+    - The Unraid boot drive, the Ventoy recovery USB (`Ventoy` / `VTOYEFI` labels), drives with a mounted partition,
+      and drives that are too small are shown under "Not available" with the reason (and the minimum size) and cannot
+      be selected; typed names are checked against that list, and the chosen disk is re-checked just before formatting
+    - Each drive is listed once (previously once per labeled partition)
+  - Startup check: `dr_usb_create.sh` stops with a clear message unless it is running on an Unraid server with `/boot`
+    mounted (skipped with `-lsblk`, which never changes a drive); `-remote` is rejected with an explanation that the
+    backup USB must be created locally and `-remote` is only for `dr_usb_backup.sh`
+  - Interactive check now tests stdin (`-t 0`) instead of stdout, so `./dr_usb_create.sh | tee log` works
+- **`run_logged` (both scripts)** now logs a failing command's output as `ERROR:` lines (previously only visible with
+  `-debug`); `clone_backup` (both scripts) unmounts the backup USB if the EFI-rename verification fails
+- **`dr_usb_backup.sh`: fixed masked failures.** `cmd | while read ...` returned the loop's status, so a
+  failed rsync/mount/umount was still logged as success. Now rsync uses `PIPESTATUS` (exit 24 treated as
+  success), mount/umount use a new `run_logged` helper, rsync is built as an array instead of `eval`, and the
+  script exits non-zero when the backup fails
 - **In-place upgrades driven by `setup_ventoy.ini`** (replaces the wipe-on-version-bump flow):
   - Every run on an existing USB now checks the installed Ventoy (`Ventoy2Disk.sh -l`) against
     `VENTOY_VERSION`; if older, it updates with `Ventoy2Disk.sh -u` (files on the USB are kept)
@@ -20,6 +149,7 @@ All notable changes to the Unraid Boot Backup Suite are documented in this file.
   - Script `VERSION` vs `CURRENT_VERSION` is still compared: newer refreshes config and updates
     `CURRENT_VERSION`; an older script than the USB is a fatal downgrade error
   - `write_current_version` now always writes the current version (previously never updated an existing file)
+  - `-upgrade` flag is still accepted but now prints a deprecation notice (it has no effect; upgrades are automatic)
   - New helpers: `download_ventoy`, `resolve_ventoy_disk`, `get_installed_ventoy_version`,
     `update_ventoy_in_place`, `preflight_upgrade_check`, `remove_old_sysrescue_isos`
   - Fixed a typo (`echo"`) in the "Sleeping for 10 seconds" message that would abort the script

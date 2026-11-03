@@ -13,8 +13,19 @@ SCRIPTS (Ready to Use)
 ✓ dr_usb_backup.sh              (Not included - part of main project)
 ✓ setup_ventoy_usb.sh           Script to create recovery USB (with Ventoy bootstrap)
 ✓ setup_ventoy.ini              Configuration file (versions, URLs, parameters)
-✓ VERSION                       Single source of truth for script version (SCRIPT_VERSION=x.y.z)
 ✓ move_dr_to_unraid.sh          Emergency recovery script
+✓ remote.ini.example            Template for dr_usb_backup.sh -remote (copy to /boot/config/plugins/dr_usb/remote.ini)
+✓ dr_usb_scrub.sh               Maintenance scrub: live /boot always; -backup also the remote mirror or the local UNRAID_DR USB
+✓ dr_usb.ini.example            Template for dr_usb.ini: settings shared by dr_usb_create.sh and dr_usb_backup.sh
+✓ lib/logging.sh                Shared module: logging, log rotation, run_logged
+✓ lib/drives.sh                 Shared module: lsblk drive-state helpers
+✓ lib/integrity.sh              Shared module: boot-file hash checks (root + previous/) and the backup manifest
+✓ lib/clone.sh                  Shared module: clone_backup (rsync to the UNRAID_DR USB)
+✓ lib/config.sh                 Shared module: defaults, dr_usb.ini loading, validation
+✓ lib/remote.sh                 Shared module: remote destination config, SSH key staging, rrsync checks
+✓ VERSION                       Single release version (SCRIPT_VERSION=x.y.z), at the repo root
+✓ build_release.sh              Builds dist/Boot-Backup-<version>.tar.gz for GitHub Releases (developers)
+✓ Unit Test/run_tests.sh        Runs all Unit Test/test_*.sh (fixtures in Unit Test/fixtures/)
 
 ───────────────────────────────────────────────────────────────
 DOCUMENTATION (Complete Suite)
@@ -29,6 +40,9 @@ SCRIPT-SPECIFIC GUIDES:
 ✓ docs/dr_usb_create.md         Interactive backup USB creation guide
 ✓ docs/dr_usb_backup.md         Automated backup script guide  
 ✓ docs/VENTOY_README.md         Recovery USB creation guide
+✓ docs/dr_usb_scrub.md          Maintenance scrub guide (live /boot and backup damage check)
+✓ docs/DESIGN_DECISIONS.md      Versioned journal of design decisions and their reasons
+✓ docs/TEST_CHECKLIST_v1.2.0.md Hands-on test checklist for release 1.2.0 (real hardware)
 
 REFERENCE MATERIALS:
 ✓ docs/PROJECT_STRUCTURE.md     Repository layout & developer guide
@@ -52,11 +66,16 @@ Root Directory:
   GETTING_STARTED.md            ← QUICK START
   INDEX.md                      ← NAVIGATION
   FILE_MANIFEST.txt             ← YOU ARE HERE
+  VERSION                       ← Single version for the whole release
+  dr_usb_create.sh / dr_usb_backup.sh   ← Backup USB creation / automated backup (-remote available)
+  dr_usb.ini.example / remote.ini.example   ← Settings templates (copy to dr_usb.ini / remote.ini)
+  lib/                          ← Shared modules (logging, drives, clone, config)
+  build_release.sh              ← Builds the release archive (developers)
+  Unit Test/                    ← Automated tests (run_tests.sh)
 
   Recovery-ISO/scripts/:
     setup_ventoy_usb.sh         ← Recovery USB creation (with Ventoy bootstrap)
     setup_ventoy.ini            ← Configuration file
-    VERSION                     ← Script version (read by setup_ventoy_usb.sh)
     move_dr_to_unraid.sh        ← Emergency recovery script
     (+ legacy scripts in historical/)
 
@@ -150,7 +169,7 @@ docs/PROJECT_STRUCTURE.md        11 KB
 setup_ventoy_usb.sh              32 KB (includes Ventoy bootstrap)
 setup_ventoy.ini                  1 KB
 VERSION                         < 1 KB
-move_dr_to_unraid.sh              7 KB
+move_dr_to_unraid.sh             20 KB
 
 Total Documentation Size:        ~96 KB
 Total Package Size:             ~155 KB
@@ -201,13 +220,32 @@ VERSION HISTORY
 ───────────────────────────────────────────────────────────────
 
 1.2.0 - 2026-11-03
-  - setup_ventoy_usb.sh now reads its version from scripts/VERSION
+  - setup_ventoy_usb.sh now reads its version from the release VERSION file at the repo root
     (SCRIPT_VERSION=x.y.z) instead of a hardcoded value
   - Script exits with an error if VERSION is missing or malformed
   - VERSION file parsed with sed (never sourced)
   - Added VERSION to the file manifest
+  - dr_usb_backup.sh -remote: 1:1 SSH/rsync mirror of /boot to a remote server (settings in remote.ini)
+  - dr_usb_backup.sh: fixed masked rsync/mount/umount failures; non-zero exit on failure
+  - Single release archive Boot-Backup-<version>.tar.gz built by build_release.sh; one root VERSION file
+  - Shared code moved into lib/ (logging, drives, clone, config); scripts source it from the install folder
+  - dr_usb.ini (optional) replaces the in-script settings block; remote.ini now defaults to beside the scripts
+  - dr_usb_create.sh writes usb-create-*.log and removes earlier successful create logs
+  - Automated tests in Unit Test/ (run_tests.sh)
+  - dr_usb_scrub.sh: maintenance scrub of the live /boot and (-backup) the remote mirror or local UNRAID_DR USB; loud, detailed failure report
+  - Hard-stop SHA-256 check of /boot and /boot/previous (against Unraid's .sha256 files) before every backup
+  - DR_MANIFEST.sums written onto the UNRAID_DR USB; the restore verifies it plus Unraid's hashes and needs OVERRIDE on failures
+  - -remote now requires rrsync on the destination (write-only, one folder, no shell); REMOTE_DIR removed; the script refuses an unrestricted key
+  - move_dr_to_unraid.sh rewritten: no longer calls make_bootable_linux; checks first, asks for RESTORE, does the
+    relabel / EFI- -> EFI / syslinux install / MBR itself, verifies, and rolls back on failure
+  - dr_usb_create.sh: fixed masked failures, unmounts target before wipe, -debug/-lsblk never format, non-zero exit on failure
+  - dr_usb_create.sh: new drive menu lists all USB disks (blank and used), marks drives with existing data (*), and
+    shows the boot drive, Ventoy USB, mounted and too-small drives as "Not available"
+  - dr_usb_create.sh: must run on the Unraid server (startup check); -remote is rejected with an explanation
+  - run_logged now logs failure output as ERROR (both scripts); EFI-rename failure now unmounts (both scripts)
   - In-place upgrades from setup_ventoy.ini: Ventoy via Ventoy2Disk.sh -u (data kept), new
     SystemRescue ISO replaces old; full wipe (-I) only as default-no fallback; no Ventoy downgrade
+  - setup_ventoy_usb.sh: -upgrade flag kept but prints a deprecation notice (upgrades are automatic)
   - CURRENT_VERSION is now always updated; fixed echo typo that aborted the script
   - Fixed ventoy.json generation (string values, one key per object, VTOY_DEFAULT_IMAGE, backup on overwrite)
   - Updated software versions in setup_ventoy.ini: Ventoy 1.1.18, SystemRescue 13.02

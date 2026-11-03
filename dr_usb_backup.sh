@@ -8,6 +8,10 @@ USE_TEST_FILE=false
 LOG_FILE=""
 BOOT_SIZE=""
 CLONE_DEVICE=""
+REMOTE_MODE=false
+BOOT_DIR="/boot"      # the Unraid flash drive; only the tests change this
+SSH_KEY_TMP=""
+NOTIFY_ON_FAILURE=true
 
 # Handle argument parsing for both User Scripts (passes path or "" as $1) 
 # and standalone execution.
@@ -32,468 +36,98 @@ while [[ $# -gt 0 ]]; do
             USE_TEST_FILE=true
             shift
             ;;
+        -remote)
+            REMOTE_MODE=true
+            shift
+            ;;
         *)
             # Use quotes around "$1" to properly display empty strings
             echo "Unknown option: \"$1\""
-            echo "Usage: $0 [-debug] [-lsblk]"
+            echo "Usage: $0 [-debug] [-lsblk] [-remote]"
             exit 1
             ;;
     esac
 done
 
 #===============================================
-# USER CONFIGURATION - EDIT THESE VALUES
+# SHARED MODULES (lib/) AND SETTINGS
+# Settings (log location, retention, mount point) now live in dr_usb.ini beside this script;
+# see dr_usb.ini.example. Defaults are built in, so the file is optional.
+#===============================================
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${SCRIPT_DIR}/lib"
+for _lib in logging drives integrity clone config remote; do
+    if [ ! -f "${LIB_DIR}/${_lib}.sh" ]; then
+        echo "FATAL: Missing module ${LIB_DIR}/${_lib}.sh" >&2
+        echo "FATAL: Install the full release archive into /boot/config/plugins/dr_usb/ and run the script from there." >&2
+        exit 1
+    fi
+    # shellcheck source=/dev/null
+    source "${LIB_DIR}/${_lib}.sh"
+done
+unset _lib
+
+
+
+
+#===============================================
+# REMOTE BACKUP (-remote)
 #===============================================
 
-# LOG_DIR: Absolute path to the directory where logs will be stored.
-LOG_DIR="/boot/logs/unraid-dr"
-
-# SNAPSHOTS: Number of log files to keep (must be >= 1).
-SNAPSHOTS=10
- 
-# RETENTION_DAYS: Number of days to retain log files (must be >= 1).
-RETENTION_DAYS=30
-
-# CLONE_MP: Absolute path to a temporary mount point for the backup USB.
-CLONE_MP="/mnt/disks/usb-backup-temp"
-
-#===============================================
-# END OF USER CONFIGURATION
-# (Do not edit below this line)
-#===============================================
-
-
-
-# --- Logging Function ---
-# A simple function to log messages to a specified file and to the console.
-log_message() {
-    local message="$1"
-    if [[ -z "${LOG_FILE}" ]]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - UNINITIALIZED_LOG - ${message}" >&2
-        return
-    fi
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - ${message}" | tee -a "${LOG_FILE}"
-}
-
-# --- Logging Setup Function ---
-# Initializes the logging environment.
-setup_logging() {
-    local log_dir="${LOG_DIR}/logs"
-    if [ ! -d "${LOG_DIR}" ]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - INFO: Base log location '${LOG_DIR}' does not exist. Attempting to create it." >&2
-        if ! mkdir -p "${LOG_DIR}"; then
-            echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Failed to create base log location '${LOG_DIR}'. Cannot setup logging." >&2
-            return 1
-        fi
-    fi
-    if [ ! -w "${LOG_DIR}" ]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Base log location '${LOG_DIR}' is not writable. Cannot setup logging." >&2
+# --- Mirror /boot to the remote server (1:1, with --delete) ---
+remote_backup() {
+    # Prevent overlapping runs
+    exec 9>/tmp/dr_usb_backup_remote.lock
+    if ! flock -n 9; then
+        log_message "ERROR: Another remote backup is already running. Exiting."
         return 1
     fi
-    if ! mkdir -p "${log_dir}"; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Failed to create log directory '${log_dir}'." >&2
-        return 1
-    fi
-    if [ ! -w "${log_dir}" ]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Log directory '${log_dir}' is not writable." >&2
-        return 1
-    fi
-    LOG_FILE="${log_dir}/boot-check-$(date '+%Y-%m-%d_%H%M%S').log"
-    if ! touch "${LOG_FILE}"; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Could not create log file at '${LOG_FILE}'." >&2
-        LOG_FILE=""
-        return 1
-    fi
-    local max_logs=$((SNAPSHOTS * 2))
-    file_rotation "${log_dir}" "boot-check-*.log" "${max_logs}" "${RETENTION_DAYS}"
-    return 0
-}
 
-# --- Validate Parameters Function ---
-# Validates the configuration parameters.
-validate_parameters() {
-    local error_count=0
-    if [ -z "$LOG_DIR" ]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: LOG_DIR is not defined in the script's configuration block." >&2
-        ((error_count++))
-    elif [[ ! "$LOG_DIR" =~ ^/ ]]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: LOG_DIR must be an absolute path starting with '/'. Got: $LOG_DIR" >&2
-        ((error_count++))
-    fi
-    if [ -z "$SNAPSHOTS" ]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: SNAPSHOTS is not defined." >&2
-        ((error_count++))
-    elif ! [[ "$SNAPSHOTS" =~ ^[0-9]+$ ]]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: SNAPSHOTS must be a number. Got: $SNAPSHOTS" >&2
-        ((error_count++))
-    elif [ "$SNAPSHOTS" -lt 1 ]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: SNAPSHOTS must be greater than or equal to 1. Got: $SNAPSHOTS" >&2
-        ((error_count++))
-    fi
-    if [ -z "$RETENTION_DAYS" ]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: RETENTION_DAYS is not defined." >&2
-        ((error_count++))
-    elif ! [[ "$RETENTION_DAYS" =~ ^[0-9]+$ ]]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: RETENTION_DAYS must be a number. Got: $RETENTION_DAYS" >&2
-        ((error_count++))
-    elif [ "$RETENTION_DAYS" -lt 1 ]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: RETENTION_DAYS must be greater than or equal to 1. Got: $RETENTION_DAYS" >&2
-        ((error_count++))
-    fi
-    if [ -z "$CLONE_MP" ]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: CLONE_MP is not defined." >&2
-        ((error_count++))
-    elif [[ ! "$CLONE_MP" =~ ^/ ]]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: CLONE_MP must be an absolute path starting with '/'. Got: $CLONE_MP" >&2
-        ((error_count++))
-    fi
-    if [ $error_count -gt 0 ]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: $error_count configuration error(s) found. Please correct them in the script." >&2
+    load_remote_config || return 1
+
+    # Safety: only mirror when /boot really is the Unraid flash drive (--delete is used)
+    log_message "INFO: Verifying /boot looks like a healthy Unraid flash drive..."
+    if ! mountpoint -q "$BOOT_DIR" || [ ! -d "$BOOT_DIR/config" ] || [ ! -f "$BOOT_DIR/bzroot" ]; then
+        log_message "ERROR: /boot is not mounted or is missing config/ or bzroot. Refusing to mirror (would delete the remote copy)."
         return 1
     fi
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - INFO: Parameters validated successfully." >&2
-    return 0
-}
+    log_message "INFO: /boot verified"
 
+    # Hard stop: never mirror a corrupted /boot over the good remote copy
+    if ! verify_boot_hashes "$BOOT_DIR"; then
+        log_message "ERROR: SOURCE /boot FAILED THE HASH CHECK. Mirror aborted so the remote copy is not overwritten with damaged files."
+        return 1
+    fi
 
-# --- File Rotation Function ---
-# Rotates files based on age (retention days) and count (snapshots).
-file_rotation() {
-    local dir="$1"
-    local pattern="$2"
-    local max_files="$3"
-    local retention_days="$4"
-    log_message "INFO: Checking retention policy for pattern '${pattern}' in '${dir}'. Max age: ${retention_days} days."
-    find "${dir}" -maxdepth 1 -type f -name "${pattern}" -mtime "+$((retention_days - 1))" | while read -r old_file; do
-        log_message "INFO: Deleting file due to retention policy (> ${retention_days} days): '${old_file}'"
-        if ! rm -f "${old_file}"; then
-            log_message "WARNING: Failed to delete retention-expired file '${old_file}'."
-        fi
+    remote_prepare || return 1
+
+    local -a rsync_args=(-rlth --delete-after --partial --stats "--timeout=$RSYNC_TIMEOUT" -e "ssh ${REMOTE_SSH_OPTS[*]}")
+    if [ "$RSYNC_BWLIMIT_KBPS" -gt 0 ]; then
+        rsync_args+=("--bwlimit=$RSYNC_BWLIMIT_KBPS")
+    fi
+    local pattern rc
+    for pattern in $RSYNC_EXCLUDES; do
+        rsync_args+=("--exclude=$pattern")
     done
-    log_message "INFO: Checking item count for pattern '${pattern}' in '${dir}'. Max files to keep: ${max_files}."
-    local current_file_count
-    current_file_count=$(find "${dir}" -maxdepth 1 -type f -name "${pattern}" | wc -l)
-    if (( current_file_count > max_files )); then
-        local num_to_delete=$((current_file_count - max_files))
-        log_message "INFO: Found ${current_file_count} files, which exceeds max of ${max_files}. Deleting the ${num_to_delete} oldest file(s)."
-        find "${dir}" -maxdepth 1 -type f -name "${pattern}" -printf '%T@ %p\n' | sort -n | head -n "${num_to_delete}" | cut -d' ' -f2- | while read -r old_file; do
-            log_message "INFO: Deleting oldest item to meet count limit: '${old_file}'"
-            if ! rm -f "${old_file}"; then
-                log_message "WARNING: Failed to delete old item file '${old_file}'."
-            fi
-        done
-    else
-        log_message "INFO: ${current_file_count} file(s) found. No count-based rotation needed for pattern '${pattern}'."
-    fi
-    return 0
-}
-
-# --- Convert Bytes to Human Readable Function ---
-convert_bytes_to_human() {
-    local bytes="$1"
-    if [[ -z "$bytes" ]] || ! [[ "$bytes" =~ ^[0-9]+$ ]]; then
-        echo "0.00G (0 bytes)"
-        return
-    fi
-    local gigabytes=$(awk "BEGIN {printf \"%.2f\", $bytes / (1024 * 1024 * 1024)}")
-    echo "${gigabytes}G (${bytes} bytes)"
-}
-
-# --- Debug print function ---
-debug_print() {
     if [ "$DEBUG" = true ]; then
-        log_message "DEBUG: $*"
+        rsync_args+=(-v --dry-run)
+        log_message "INFO: DEBUG MODE - Running rsync with --dry-run (no changes will be made)"
     fi
-}
+    rsync_args+=("$BOOT_DIR/" "$REMOTE_TARGET:./")
 
-# --- Function to load the lsblk data ---
-load_drive_state() {
-    if [ "$USE_TEST_FILE" = true ]; then
-        log_message "INFO: Using test-lsblk file for drive state (synthetic testing mode)..."
-        if [ ! -f "./test-lsblk" ]; then
-            log_message "ERROR: Test file './test-lsblk' not found"
-            return 1
-        fi
-        while IFS= read -r line; do
-            if [[ -n "$line" ]]; then
-                current_drive_state+=("$line")
-                debug_print "Loaded drive state line: $line"
-            fi
-        done < "./test-lsblk"
-        if [ ${#current_drive_state[@]} -eq 0 ]; then
-            log_message "ERROR: No drive data loaded from test-lsblk file"
-            return 1
-        fi
-        log_message "INFO: Loaded ${#current_drive_state[@]} drive entries from test-lsblk file"
+    log_message "INFO: Mirroring /boot/ to $REMOTE_TARGET (the folder set by rrsync on the server)..."
+    debug_print "rsync args: ${rsync_args[*]}"
+    rsync "${rsync_args[@]}" 2>&1 | while IFS= read -r line; do log_message "  rsync: $line"; done
+    rc=${PIPESTATUS[0]}
+
+    if [ $rc -eq 0 ]; then
+        log_message "INFO: Remote mirror completed successfully"
+    elif [ $rc -eq 24 ]; then
+        log_message "WARNING: rsync exit 24 (some source files vanished during transfer) - treating as success"
     else
-        log_message "INFO: Loading current drive state from lsblk..."
-        local lsblk_output
-        if ! lsblk_output=$(lsblk -b -P -o NAME,UUID,FSTYPE,SIZE,MOUNTPOINT,LABEL,TRAN 2>&1); then
-            log_message "ERROR: Failed to execute lsblk command"
-            log_message "ERROR: lsblk output: $lsblk_output"
-            return 1
-        fi
-        debug_print "lsblk command executed successfully"
-        while IFS= read -r line; do
-            if [[ -n "$line" ]]; then
-                current_drive_state+=("$line")
-            fi
-        done <<< "$lsblk_output"
-        if [ ${#current_drive_state[@]} -eq 0 ]; then
-            log_message "ERROR: No drive data loaded from lsblk"
-            return 1
-        fi
-        log_message "INFO: Loaded ${#current_drive_state[@]} drive entries from lsblk"
-    fi
-    return 0
-}
-
-# --- Function to get column value from a key=value pair line ---
-get_column_value() {
-    local row="$1"
-    local column_name="$2"
-    local pattern="${column_name}=\"([^\"]*)\""
-    if [[ $row =~ $pattern ]]; then
-        echo "${BASH_REMATCH[1]}"
-    else
-        echo ""
-    fi
-}
-
-# --- Function to get TRAN type from parent device ---
-get_tran_type() {
-    local current_index="$1"
-    local current_name=$(get_column_value "${current_drive_state[$current_index]}" "NAME")
-    local base_device=$(echo "$current_name" | sed 's/[0-9]*$//' | sed 's/p$//')
-    debug_print "Current name: $current_name"
-    debug_print "Looking for base device: $base_device"
-    debug_print "Starting from index: $current_index"
-    for ((i=current_index-1; i>=0; i--)); do
-        local check_row="${current_drive_state[$i]}"
-        local check_name=$(get_column_value "$check_row" "NAME")
-        local check_tran=$(get_column_value "$check_row" "TRAN")
-        debug_print "Checking index $i: name='$check_name' tran='$check_tran'"
-        if [[ "$check_name" == "$base_device" ]]; then
-            debug_print "Found parent device with TRAN='$check_tran'"
-            echo "$check_tran"
-            return
-        fi
-    done
-    debug_print "No parent device found"
-    echo ""
-}
-
-# --- Function to print partition state ---
-print_partition_state() {
-    local row="$1"
-    local row_index="$2"
-    local name=$(get_column_value "$row" "NAME")
-    local mountpoint=$(get_column_value "$row" "MOUNTPOINT")
-    local uuid=$(get_column_value "$row" "UUID")
-    local fstype=$(get_column_value "$row" "FSTYPE")
-    local label=$(get_column_value "$row" "LABEL")
-    local size=$(get_column_value "$row" "SIZE")
-    local tran=$(get_column_value "$row" "TRAN")
-    if [[ -z "$tran" ]]; then
-        tran=$(get_tran_type "$row_index")
-    fi
-    local size_human=$(convert_bytes_to_human "$size")
-    local drive_location="$name"
-    if [[ "$name" =~ ^(sd[a-z][0-9]+|nvme[0-9]+n[0-9]+p[0-9]+|md[0-9]+p[0-9]+) ]]; then
-        drive_location="/dev/$name"
-    fi
-    log_message "  Drive location: $drive_location"
-    log_message "  Current Mountpoint: $mountpoint"
-    log_message "  UUID: $uuid"
-    log_message "  File type: $fstype"
-    log_message "  Current Label: $label"
-    log_message "  Drive Size: $size_human"
-    log_message "  Transport Type: $tran"
-    log_message ""
-}
-
-# --- Function to perform clone backup (NON-INTERACTIVE) ---
-clone_backup() {
-    local clone_device="$1"
-    if [ -z "$clone_device" ]; then
-        log_message "ERROR: No clone device provided to clone_backup function"
+        log_message "ERROR: Remote mirror FAILED (rsync exit code $rc)"
         return 1
     fi
-    log_message "INFO: Starting clone backup process for device: $clone_device"
-    debug_print "clone_backup called with device: $clone_device"
-    local clone_source="${clone_device}1"
-    debug_print "Clone source partition set to: $clone_source"
-    if [ ! -b "$clone_source" ]; then
-        log_message "ERROR: Clone source partition $clone_source does not exist as a block device"
-        return 1
-    fi
-    log_message "INFO: Clone source partition: $clone_source"
-    local clone_mounted_already="FALSE"
-    local current_mount_point=""
-    current_mount_point=$(findmnt -n -o TARGET "$clone_source" 2>/dev/null)
-    if [ -n "$current_mount_point" ]; then
-        log_message "INFO: $clone_source is already mounted at: $current_mount_point"
-        local mount_options=$(findmnt -n -o OPTIONS "$clone_source" 2>/dev/null)
-        debug_print "Mount options: $mount_options"
-        local first_option=$(echo "$mount_options" | cut -d',' -f1)
-        debug_print "First mount option: $first_option"
-        if [[ "$first_option" == "rw" ]]; then
-            log_message "INFO: $clone_source is mounted read/write"
-            CLONE_MP="$current_mount_point"
-            clone_mounted_already="TRUE"
-            debug_print "Using existing mount point: $CLONE_MP"
-        else
-            log_message "WARNING: $clone_source is mounted read-only (first option: $first_option). Unmounting..."
-            if ! umount "$clone_source" 2>&1 | while IFS= read -r line; do debug_print "umount: $line"; done; then
-                log_message "ERROR: Failed to unmount $clone_source, attempting force unmount..."
-                if ! umount -f "$clone_source" 2>&1 | while IFS= read -r line; do debug_print "umount -f: $line"; done; then
-                    log_message "ERROR: Failed to force unmount $clone_source"
-                    return 1
-                fi
-            fi
-            log_message "INFO: Successfully unmounted $clone_source"
-        fi
-    fi
-    if [ "$clone_mounted_already" != "TRUE" ]; then
-        log_message "INFO: Mounting $clone_source at $CLONE_MP..."
-        if [ ! -d "$CLONE_MP" ]; then
-            debug_print "Creating mount point directory: $CLONE_MP"
-            if ! mkdir -p "$CLONE_MP"; then
-                log_message "ERROR: Failed to create mount point directory: $CLONE_MP"
-                return 1
-            fi
-        fi
-        if [ ! -w "$CLONE_MP" ]; then
-            log_message "ERROR: Mount point directory $CLONE_MP is not writable"
-            return 1
-        fi
-        debug_print "Mount point directory verified: $CLONE_MP"
-        if ! mount "$clone_source" "$CLONE_MP" 2>&1 | while IFS= read -r line; do debug_print "mount: $line"; done; then
-            log_message "ERROR: Failed to mount $clone_source at $CLONE_MP"
-            return 1
-        fi
-        log_message "INFO: Successfully mounted $clone_source at $CLONE_MP"
-        local mount_options=$(findmnt -n -o OPTIONS "$clone_source" 2>/dev/null)
-        debug_print "Checking mount options after mount: $mount_options"
-        local first_option=$(echo "$mount_options" | cut -d',' -f1)
-        debug_print "First mount option: $first_option"
-        if [[ "$first_option" == "rw" ]]; then
-            log_message "INFO: Mount verified as read/write"
-        else
-            log_message "ERROR: Device mounted but not read/write. First option: $first_option, Full options: $mount_options"
-            umount "$CLONE_MP"
-            return 1
-        fi
-    fi
-    log_message "INFO: Verifying /boot is mounted..."
-    if ! mountpoint -q /boot; then
-        log_message "ERROR: /boot is not mounted"
-        if [ "$clone_mounted_already" != "TRUE" ]; then
-            umount "$CLONE_MP"
-        fi
-        return 1
-    fi
-    log_message "INFO: /boot is correctly mounted"
-    log_message "INFO: Starting rsync backup from /boot/ to $CLONE_MP/"
-    local rsync_cmd="rsync -ah"
-    if [ "$DEBUG" = true ]; then
-        rsync_cmd="$rsync_cmd -v --dry-run"
-        log_message "INFO: DEBUG MODE - Running rsync with --dry-run (no actual changes)"
-    fi
-    rsync_cmd="$rsync_cmd /boot/ $CLONE_MP/"
-    debug_print "Rsync command: $rsync_cmd"
-    log_message "INFO: Executing: $rsync_cmd"
-    if ! eval "$rsync_cmd" 2>&1 | while IFS= read -r line; do log_message "  rsync: $line"; done; then
-        log_message "ERROR: Rsync backup failed"
-        if [ "$clone_mounted_already" != "TRUE" ]; then
-            umount "$CLONE_MP"
-        fi
-        return 1
-    fi
-    log_message "INFO: Rsync backup completed successfully"
-    log_message "INFO: Checking for old BACKUP-* marker files in $CLONE_MP..."
-    local backup_files_found=false
-    while IFS= read -r backup_file; do
-        if [ -n "$backup_file" ]; then
-            backup_files_found=true
-            log_message "INFO: Deleting old backup marker: $backup_file"
-            debug_print "Removing file: $backup_file"
-            if [ "$DEBUG" != true ]; then
-                rm -f "$backup_file"
-            else
-                log_message "INFO: DEBUG MODE - Would delete: $backup_file"
-            fi
-        fi
-    done < <(find "$CLONE_MP" -maxdepth 1 -type f -name "BACKUP-*" 2>/dev/null)
-    if [ "$backup_files_found" = false ]; then
-        log_message "INFO: No old BACKUP-* marker files found"
-    fi
-    local timestamp=$(date '+%m-%d-%Y-%H-%M')
-    local backup_marker="$CLONE_MP/BACKUP-$timestamp"
-    log_message "INFO: Creating backup marker file: BACKUP-$timestamp"
-    debug_print "Touch file: $backup_marker"
-    if [ "$DEBUG" != true ]; then
-        if ! touch "$backup_marker"; then
-            log_message "ERROR: Failed to create backup marker file: $backup_marker"
-            if [ "$clone_mounted_already" != "TRUE" ]; then
-                umount "$CLONE_MP"
-            fi
-            return 1
-        fi
-    else
-        log_message "INFO: DEBUG MODE - Would create: $backup_marker"
-    fi
-    log_message "INFO: Backup marker created successfully"
-    log_message "INFO: Disabling EFI boot to prevent accidental boot from backup..."
-    local efi_dir="$CLONE_MP/EFI"
-    local efi_disabled_dir="$CLONE_MP/EFI-"
-    if [ -d "$efi_dir" ]; then
-        log_message "INFO: Found EFI directory, renaming to EFI-"
-        debug_print "Moving $efi_dir to $efi_disabled_dir"
-        if [ "$DEBUG" != true ]; then
-            if [ -d "$efi_disabled_dir" ]; then
-                debug_print "Removing existing EFI- directory"
-                rm -rf "$efi_disabled_dir"
-            fi
-            if ! mv "$efi_dir" "$efi_disabled_dir"; then
-                log_message "ERROR: Failed to rename EFI directory"
-                if [ "$clone_mounted_already" != "TRUE" ]; then
-                    umount "$CLONE_MP"
-                fi
-                return 1
-            fi
-            if [ -d "$efi_disabled_dir" ] && [ ! -d "$efi_dir" ]; then
-                log_message "INFO: EFI directory successfully renamed to EFI-"
-            else
-                log_message "ERROR: EFI directory rename verification failed"
-                return 1
-            fi
-        else
-            log_message "INFO: DEBUG MODE - Would rename $efi_dir to $efi_disabled_dir"
-        fi
-    else
-        log_message "INFO: No EFI directory found, skipping EFI disable step"
-    fi
-    if [ "$clone_mounted_already" != "TRUE" ]; then
-        log_message "INFO: Unmounting $clone_source from $CLONE_MP..."
-        debug_print "Unmounting: $clone_source"
-        if [ "$DEBUG" != true ]; then
-            if ! umount "$CLONE_MP" 2>&1 | while IFS= read -r line; do debug_print "umount: $line"; done; then
-                log_message "ERROR: Failed to unmount $clone_source"
-                return 1
-            fi
-            if mountpoint -q "$CLONE_MP"; then
-                log_message "ERROR: Device still appears to be mounted after unmount attempt"
-                return 1
-            fi
-            log_message "INFO: Successfully unmounted $clone_source"
-        else
-            log_message "INFO: DEBUG MODE - Would unmount $clone_source"
-        fi
-    else
-        log_message "INFO: Leaving $clone_source mounted (was already mounted before backup)"
-    fi
-    log_message "INFO: Clone backup process completed successfully"
     return 0
 }
 
@@ -612,26 +246,53 @@ main_backup() {
 }
 ####################MAIN CODE EXECUTION
 
-# First, validate parameters. This must be run before logging is set up.
+# Load settings (defaults + optional dr_usb.ini), then validate. This must be run before logging is set up.
+if ! load_config; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Could not load settings. Exiting." >&2
+    exit 1
+fi
 if ! validate_parameters; then
     echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Parameter validation failed. Exiting." >&2
     exit 1
 fi
 
 # Initialize logging using the validated parameters
-if ! setup_logging; then
+if ! setup_logging "boot-check"; then
     echo "$(date '+%Y-%m-%d %H:%M:%S') - FATAL: Failed to setup logging. Exiting." >&2
     exit 1
 fi
+file_rotation "${LOG_DIR}/logs" "boot-check-*.log" "$((SNAPSHOTS * 2))" "${RETENTION_DAYS}"
 
 log_message "INFO: Starting UNRAID DR USB **BACKUP** script (Non-Interactive)"
 log_message "INFO: Configuration parameters:"
+if [ "$DR_USB_INI_LOADED" = true ]; then
+    log_message "INFO:   Settings file: $DR_USB_INI"
+else
+    log_message "INFO:   Settings file: (none found, using built-in defaults)"
+fi
 log_message "INFO:   LOG_DIR=$LOG_DIR"
 log_message "INFO:   SNAPSHOTS=$SNAPSHOTS"
 log_message "INFO:   RETENTION_DAYS=$RETENTION_DAYS"
 log_message "INFO:   CLONE_MP=$CLONE_MP"
 
-# Run the main function
-main_backup
+trap cleanup_remote EXIT
 
-log_message "INFO: UNRAID DR USB **BACKUP** script completed."
+if [ "$REMOTE_MODE" = true ]; then
+    log_message "INFO: Mode: REMOTE (-remote) - mirroring /boot to the server defined in $REMOTE_INI"
+    remote_backup
+    backup_rc=$?
+    if [ $backup_rc -ne 0 ]; then
+        notify_failure "Remote mirror of /boot failed. See log: $LOG_FILE"
+    fi
+else
+    log_message "INFO: Mode: LOCAL - cloning /boot to the UNRAID_DR USB"
+    main_backup
+    backup_rc=$?
+fi
+
+if [ $backup_rc -ne 0 ]; then
+    log_message "ERROR: UNRAID DR USB **BACKUP** script finished WITH ERRORS (exit $backup_rc)."
+else
+    log_message "INFO: UNRAID DR USB **BACKUP** script completed."
+fi
+exit $backup_rc

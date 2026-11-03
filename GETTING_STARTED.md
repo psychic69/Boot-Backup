@@ -12,21 +12,38 @@ Before you begin, gather:
 - [ ] **SSH access** to your Unraid server
 - [ ] **5-10 minutes** of your time
 
-## Installation - 3 Simple Steps
+## Installation - 4 Simple Steps
+
+### Step 0: Install the Release (2 minutes)
+
+Everything ships as one archive. On the Unraid server (SSH), download it from the [Releases page](https://github.com/psychic69/Boot-Backup/releases), verify it, and extract it (use the current version number in place of `1.2.0`):
+
+```bash
+cd /tmp
+wget https://github.com/psychic69/Boot-Backup/releases/download/v1.2.0/Boot-Backup-1.2.0.tar.gz
+wget https://github.com/psychic69/Boot-Backup/releases/download/v1.2.0/Boot-Backup-1.2.0.tar.gz.sha256
+sha256sum -c Boot-Backup-1.2.0.tar.gz.sha256        # must print: Boot-Backup-1.2.0.tar.gz: OK
+tar -xzf Boot-Backup-1.2.0.tar.gz -C /boot/config/plugins/ --no-same-owner --no-same-permissions
+```
+
+**What happens:**
+- ✅ Creates `/boot/config/plugins/dr_usb/` with the backup and create scripts, their `lib/` modules, the recovery USB tools (`Recovery-ISO/`) and settings templates
+- ✅ Safe to repeat later to upgrade: your own settings files are never overwritten
+
+---
 
 ### Step 1: Create Your Backup USB (5 minutes)
 
-**From SSH Terminal:**
+**From SSH Terminal on your Unraid server:**
 
 ```bash
-# 1. Download or locate dr_usb_create.sh
-cd /boot/config/plugins/user.scripts/scripts/DR_USB_Create/
+# 1. Plug in your backup USB (a brand-new or previously used stick both work)
 
 # 2. Run the script
-./script
+bash /boot/config/plugins/dr_usb/dr_usb_create.sh
 
 # 3. Follow the prompts:
-#    - Select your USB drive from the list
+#    - Select your USB drive from the list (drives that already contain data are marked *)
 #    - Confirm formatting (WARNING: Erases drive!)
 #    - Wait for initial backup to complete
 ```
@@ -46,7 +63,11 @@ cd /boot/config/plugins/user.scripts/scripts/DR_USB_Create/
 2. Click **Add New Script**
 3. Name it: `DR_USB_Backup`
 4. Click **Edit Script**
-5. Paste contents of `dr_usb_backup.sh`
+5. Replace the contents with these two lines:
+   ```bash
+   #!/bin/bash
+   bash /boot/config/plugins/dr_usb/dr_usb_backup.sh
+   ```
 6. Click **Save Changes**
 7. Set schedule to **Daily** at 3:00 AM (or your preferred time)
 8. Click **Apply**
@@ -54,8 +75,29 @@ cd /boot/config/plugins/user.scripts/scripts/DR_USB_Create/
 **What happens:**
 - ✅ Backup runs automatically every day
 - ✅ Only copies changed files (fast!)
+- ✅ Checks your Unraid boot files against their hashes first and stops if any are damaged
 - ✅ Creates logs in `/boot/logs/unraid-dr/logs/`
 - ✅ Completely hands-off
+
+> Want to change the log folder, retention or mount point? Copy `dr_usb.ini.example` to `dr_usb.ini` in the same folder and edit it (optional).
+
+---
+
+### Optional: Mirror Your Boot Drive to Another Server (remote backup)
+
+Want an extra, off-box copy? `dr_usb_backup.sh -remote` makes a 1:1 mirror of `/boot` on another machine over SSH. It is **in addition to** the local `UNRAID_DR` USB backup above (it runs separately and does not touch the USB), so keep Steps 1 and 2.
+
+**What you need:** a Linux server with SSH, `rsync` and **`rrsync`** (required: it locks the backup key to rsync-only, write-only, one folder), a dedicated user and backup folder on it, and about 10 minutes.
+
+**The short version:**
+1. In `/boot/config/plugins/dr_usb/`, copy `remote.ini.example` to `remote.ini` and fill in the host and user.
+2. Create an SSH key on the Unraid server, authorize it on the remote server with an `rrsync` line, and pin the server's host key.
+3. Test with `bash /boot/config/plugins/dr_usb/dr_usb_backup.sh -remote -debug` (dry run; nothing is copied).
+4. Schedule a second User Script containing `bash /boot/config/plugins/dr_usb/dr_usb_backup.sh -remote`.
+
+**Full step-by-step instructions, every `remote.ini` setting, and troubleshooting:** [docs/dr_usb_backup.md → Remote Backup](docs/dr_usb_backup.md#remote-backup--remote)
+
+> ⚠️ The mirror deletes files in the backup folder that no longer exist on `/boot`, so use a folder dedicated to this backup. `/boot` contains your license key and password hashes, so only mirror to a server you trust.
 
 ---
 
@@ -68,7 +110,7 @@ cd /boot/config/plugins/user.scripts/scripts/DR_USB_Create/
 #    (Ventoy will be auto-installed if not already present)
 
 # 2. Run the setup script
-./Recovery-ISO/scripts/setup_ventoy_usb.sh
+bash /boot/config/plugins/dr_usb/Recovery-ISO/scripts/setup_ventoy_usb.sh
 
 # 3. Follow prompts to scan/select USB if needed
 #    (only happens if Ventoy not already installed)
@@ -86,9 +128,12 @@ cd /boot/config/plugins/user.scripts/scripts/DR_USB_Create/
 - ✅ Tracks version for future upgrades
 
 **To upgrade an existing recovery USB later:**
+
+Edit the Ventoy / SystemRescue versions in `Recovery-ISO/scripts/setup_ventoy.ini` if you want newer ones, then plug in the USB and re-run the same script:
 ```bash
-./Recovery-ISO/scripts/setup_ventoy_usb.sh -upgrade
+bash /boot/config/plugins/dr_usb/Recovery-ISO/scripts/setup_ventoy_usb.sh
 ```
+It compares what is on the USB with the ini file, updates Ventoy in place (your files are kept), and swaps in a new SystemRescue ISO if needed.
 
 ---
 
@@ -118,6 +163,16 @@ You should see:
 - ✅ New log file with timestamp
 - ✅ `LAST_BACKUP_SUCCESS.txt` updated with current date/time
 
+### Test the Remote Backup (if you set it up)
+
+```bash
+# Dry run - connects and lists what would be copied, changes nothing
+bash /boot/config/plugins/dr_usb/dr_usb_backup.sh -remote -debug
+
+# Check the newest log for "Remote connection OK" and "script completed"
+ls -t /boot/logs/unraid-dr/logs/ | head -1
+```
+
 ## What Happens Now?
 
 ### Daily Operation (Automatic)
@@ -137,9 +192,10 @@ You should see:
 5. **Select** "Unraid Recovery - SystemRescue"
 6. **Type:** `mountall`
 7. **Type:** `bash /mnt/sdX1/unraid_recovery/move_dr_to_unraid.sh`
-8. **Type:** `poweroff` when done
-9. **Remove** both USBs
-10. **Boot** normally and re-license
+8. **Check** the drive and backup time shown, then **type** `RESTORE` (Enter cancels)
+9. **Type:** `poweroff` when done
+10. **Remove** both USBs
+11. **Boot** normally and re-license
 
 **Recovery time: 2-5 minutes total**
 
@@ -158,8 +214,11 @@ ls -lh /mnt/disks/UNRAID_DR/
 # Manually run backup (for testing)
 # From WebGUI: Settings → User Scripts → DR_USB_Backup → "Run in Background"
 
+# Mirror /boot to the remote server now (after setting up remote.ini)
+bash /boot/config/plugins/dr_usb/dr_usb_backup.sh -remote
+
 # Recreate backup USB from scratch
-/boot/config/plugins/user.scripts/scripts/DR_USB_Create/script
+bash /boot/config/plugins/dr_usb/dr_usb_create.sh
 ```
 
 ## Important Notes
@@ -189,6 +248,9 @@ Store your Ventoy recovery USB in a safe location separate from your server. You
 
 ### Maintenance Schedule
 
+**Weekly or monthly - run the scrub** (checks your running boot drive and your backup for silent damage; read-only):
+`bash /boot/config/plugins/dr_usb/dr_usb_scrub.sh -backup`  See [docs/dr_usb_scrub.md](docs/dr_usb_scrub.md).
+
 **Monthly:**
 - ✅ Check `LAST_BACKUP_SUCCESS.txt` timestamp
 - ✅ Verify backup logs show no errors
@@ -216,6 +278,7 @@ Store your Ventoy recovery USB in a safe location separate from your server. You
 - "No UNRAID_DR found" → Run `dr_usb_create.sh` first
 - "Multiple UNRAID_DR found" → Remove duplicate drive
 - "Can't run from GUI" → Use SSH for `dr_usb_create.sh`
+- Remote backup problems (SSH, keys, `remote.ini`) → See the troubleshooting table in [docs/dr_usb_backup.md](docs/dr_usb_backup.md#remote-backup--remote)
 
 ---
 

@@ -17,44 +17,49 @@ You **MUST** run this script from an **SSH terminal**.
 ## Features
 
 * **Interactive:** Guides you through selecting a suitable USB drive.
-* **Safe:** Actively scans for and ignores your primary `UNRAID` boot drive.
+* **Works with new or used USB drives:** Lists every USB drive, including blank ones with no partitions or label. Drives that already contain data are marked with `*` and their existing partitions, filesystems and labels are listed so you can recognize them.
+* **Safe:** Your `UNRAID` boot drive, your Ventoy recovery USB, and any drive with a mounted partition are shown under "Not available" with the reason, and cannot be selected (the script also re-checks right before formatting). Drives that are too small are listed there too, with the minimum size needed.
 * **Smart Formatting:** Wipes, partitions, and formats the selected drive as FAT32 with the required `UNRAID_DR` label.
 * **Size Aware:** If a drive is > 64GB, it creates a 64GB partition to ensure compatibility.
 * **First Backup:** Automatically runs the first backup (`clone_backup`) after formatting is complete.
+* **Runs on the Unraid server only:** The backup USB must be created on the Unraid server whose boot drive it protects. The script stops with a clear message on any other machine, and `-remote` (a `dr_usb_backup.sh` option) is rejected with an explanation. The `-lsblk` test mode skips the check because it never changes a drive.
+* **Checks your Unraid files first:** Before the first backup is copied, every boot file in `/boot` and `/boot/previous` is verified against the `.sha256` file Unraid ships with it. If anything is damaged the script stops without copying. A manifest of `config/` and the other small files (`DR_MANIFEST.sums`) is written onto the new backup USB for the emergency restore to check.
 * **Failsafe:** If an `UNRAID_DR` drive is *already* found, this script will exit with an error, protecting your existing backup.
 
 ---
 
 ## Installation & Usage
 
-It's recommended to add this script to the User Scripts plugin for easy management, but you will **never** run it from the GUI.
+This script is interactive, so you run it from an SSH terminal on the Unraid server. You will **never** run it from the User Scripts plugin or the GUI.
 
-### Step 1: Install the Script
+### Step 1: Install the Release
 
-1.  In the Unraid GUI, go to **Settings** > **User Scripts**.
-2.  Click **Add New Script**.
-3.  Enter the name `DR_USB_Create` and click **OK**.
-4.  Click the script's icon, then click **Edit Script**.
-5.  Paste the **full contents** of your `dr_usb_create.sh` file into the editor.
-6.  Click **Save Changes**.
+The scripts, shared modules and settings templates ship as one release archive. On the Unraid server (SSH, as root), download it from the [Releases page](https://github.com/psychic69/Boot-Backup/releases), verify it, and extract it (use the current version number in place of `1.2.0`):
 
-### Step 2: Set Schedule to Disabled
+```bash
+cd /tmp
+wget https://github.com/psychic69/Boot-Backup/releases/download/v1.2.0/Boot-Backup-1.2.0.tar.gz
+wget https://github.com/psychic69/Boot-Backup/releases/download/v1.2.0/Boot-Backup-1.2.0.tar.gz.sha256
+sha256sum -c Boot-Backup-1.2.0.tar.gz.sha256        # must print: Boot-Backup-1.2.0.tar.gz: OK
+tar -xzf Boot-Backup-1.2.0.tar.gz -C /boot/config/plugins/ --no-same-owner --no-same-permissions
+```
 
-1.  Find the `DR_USB_Create` script in your list.
-2.  Set its schedule to **Schedule Disabled**. This is critical.
+This creates `/boot/config/plugins/dr_usb/`. If you already installed the release for the backup script, you already have everything. Settings (log folder, retention, mount point) are optional and live in `dr_usb.ini`; see the settings table in the [backup guide](dr_usb_backup.md#step-1-install-the-release).
 
-### Step 3: Run from SSH (One Time Only)
+### Step 2: Run from SSH (One Time Only)
 
-1.  Connect to your Unraid server via **SSH**.
-2.  Find the path to your script. It will be:
-    `/boot/config/plugins/user.scripts/scripts/DR_USB_Create/script`
-3.  Run the script by pasting that full path into your terminal and pressing Enter:
+1.  Connect to your Unraid server via **SSH** (this must be the server whose boot drive you want to protect).
+2.  Run the script:
 
     ```bash
-    /boot/config/plugins/user.scripts/scripts/DR_USB_Create/script
+    bash /boot/config/plugins/dr_usb/dr_usb_create.sh
     ```
 
-4.  Follow the interactive prompts to select and format your drive. After it finishes, your backup drive is ready.
+3.  Follow the interactive prompts to select and format your drive. After it finishes, your backup drive is ready; next, schedule `dr_usb_backup.sh` (see the [backup guide](dr_usb_backup.md)).
+
+### Log File
+
+Each run writes a small log to `LOG_DIR/logs/usb-create-DATE_TIME.log` (default `/boot/logs/unraid-dr/logs/`). When a new run starts, earlier create logs that finished successfully are deleted, so you normally keep just the latest one; logs from runs that ended with errors are kept for diagnosis. These logs are separate from the daily backup logs (`boot-check-*.log`) and are not rotated with them.
 
 ---
 
@@ -63,11 +68,11 @@ It's recommended to add this script to the User Scripts plugin for easy manageme
 These flags are for development and testing. You can run them from SSH:
 
 ```bash
-# Example of running with debug mode
-/boot/config/plugins/user.scripts/scripts/DR_USB_Create/script -debug
+# Example of running with debug mode (the full menu and prompts run, but no drive is changed)
+bash /boot/config/plugins/dr_usb/dr_usb_create.sh -debug
 
 -debug: Enables verbose logging. Prints extra "DEBUG:" lines to the log file to help trace the script's logic.
--lsblk: Forces the script to use a local file named test-lsblk in the same directory, instead of running the real lsblk command. This is for synthetic testing.
+-lsblk: Forces the script to use a local file named test-lsblk in the current directory, instead of running the real lsblk command. This is for synthetic testing and never changes a drive.
 
 FAQ
 Q: Why can't I run this from the GUI?
@@ -80,4 +85,4 @@ A: This is a safety feature. It means your backup drive is already set up. You s
 
 Q: It can't find my USB drive!
 
-A: The script looks for USB drives that are at least 95% the size of your main Unraid flash drive and already have a label. If it's a brand new drive, you may need to format it once (with any label) so that it appears in the list.
+A: The script lists every USB drive, blank or used. Look under "Not available (cannot be selected)" at the end of the list: it shows each skipped drive and why. The usual reasons are that the drive is smaller than 95% of your main Unraid flash drive (the message shows the minimum size), it is your Unraid boot drive or Ventoy recovery USB, or one of its partitions is mounted (unmount it and run the script again). A `*` next to a selectable drive just means it already has data on it, which will be erased.

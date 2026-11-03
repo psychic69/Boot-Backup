@@ -1,0 +1,48 @@
+#!/bin/bash
+# Remote backup settings for dr_usb_backup.sh -remote
+#
+# Install:  copy this file to  /boot/config/plugins/dr_usb/remote.ini  and edit it
+#           (beside the scripts; to use another location set REMOTE_INI in dr_usb.ini).
+# Mode:     -remote makes a 1:1 MIRROR of /boot on the destination (rsync --delete-after), including previous/.
+#           There are no snapshots; the remote copy always matches the running USB.
+#
+# FULL SETUP GUIDE: Docs/dr_usb_backup.md ("Remote Backup"). In short:
+#
+# ONE-TIME KEY SETUP (run on the Unraid server, as root):
+#   ssh-keygen -t ed25519 -N "" -C "unraid-dr-backup" -f /boot/config/plugins/dr_usb/id_ed25519
+#   ssh-keyscan -p 22 backup.lan > /boot/config/plugins/dr_usb/known_hosts
+#   # verify the fingerprint:  ssh-keygen -lf /boot/config/plugins/dr_usb/known_hosts
+#
+# ON THE DESTINATION (Linux with sshd, rsync and rrsync - rrsync is REQUIRED):
+#   1. Create a dedicated unprivileged user with a normal login shell, and create the backup folder
+#      yourself (the restricted key cannot create it), owned by that user:
+#          sudo adduser --disabled-password --gecos "" unraidbackup
+#          sudo mkdir -p /srv/backups/unraid-boot && sudo chown unraidbackup: /srv/backups/unraid-boot
+#   2. Add the contents of id_ed25519.pub to ~unraidbackup/.ssh/authorized_keys, locked to rrsync:
+#          restrict,from="<unraid-ip>",command="rrsync -wo /srv/backups/unraid-boot" ssh-ed25519 AAAA... unraid-dr-backup
+#      This gives the key rsync only, write-only, inside that one folder: no shell, no reading the backups.
+#      The folder is set HERE, on the server - there is no folder setting in this file.
+#   The script refuses to run if the key can run ordinary commands.
+#
+# Values must not contain spaces or shell special characters.
+
+# --- Destination ---
+REMOTE_HOST="backup.lan"                 # hostname or IPv4 address
+REMOTE_PORT=22
+REMOTE_USER="unraidbackup"               # the dedicated unprivileged user (never root)
+
+# --- SSH ---
+# The key lives on the flash drive. The script copies it to RAM with 600 permissions
+# at run time (the FAT flash drive cannot hold a key ssh will accept) and deletes the copy on exit.
+SSH_KEY_FILE="/boot/config/plugins/dr_usb/id_ed25519"
+SSH_KNOWN_HOSTS="/boot/config/plugins/dr_usb/known_hosts"   # pinned destination host key
+SSH_CONNECT_TIMEOUT=15                   # seconds
+
+# --- rsync ---
+RSYNC_TIMEOUT=120                        # abort if no data transfers for this many seconds
+RSYNC_BWLIMIT_KBPS=0                     # 0 = unlimited
+RSYNC_EXCLUDES=""                        # space-separated rsync patterns, e.g. "/logs/"
+                                         # (empty = true 1:1 copy, including the script's own logs)
+
+# --- Alerts ---
+NOTIFY_ON_FAILURE=true                   # Unraid GUI notification when the remote backup fails

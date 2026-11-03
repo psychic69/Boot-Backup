@@ -1,0 +1,25 @@
+#!/bin/bash
+# Settings for dr_usb_backup.sh and dr_usb_create.sh
+#
+# Install: copy this file to  dr_usb.ini  in the same folder as the scripts
+#          (/boot/config/plugins/dr_usb/dr_usb.ini) and edit only what you want to change.
+#          The file is optional: every value below is also the built-in default.
+#          Upgrading the release never overwrites dr_usb.ini.
+#
+# Remote backup (-remote) has its own file: remote.ini (see remote.ini.example).
+
+# LOG_DIR: Absolute path to the directory where logs are stored (a "logs" folder is created inside it).
+LOG_DIR="/boot/logs/unraid-dr"
+
+# SNAPSHOTS: Number of backup log files to keep (must be >= 1).
+SNAPSHOTS=10
+
+# RETENTION_DAYS: Number of days to keep backup log files (must be >= 1).
+RETENTION_DAYS=30
+
+# CLONE_MP: Absolute path to a temporary mount point for the UNRAID_DR backup USB.
+CLONE_MP="/mnt/disks/usb-backup-temp"
+
+# REMOTE_INI: Location of the remote backup settings (only used with dr_usb_backup.sh -remote).
+# Uncomment to move it; the default is remote.ini beside the scripts.
+#REMOTE_INI="/boot/config/plugins/dr_usb/remote.ini"

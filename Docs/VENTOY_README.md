@@ -10,12 +10,9 @@
 
 ## Setup (Run from Unraid)
 
-# Make scripts executable if they are NOT.  By default they should be.
-chmod +x setup_ventoy_usb.sh
-chmod +x move_dr_to_unraid.sh
-
-# Run setup (will auto-create ventoy.json)
-./setup_ventoy_usb.sh
+# Install the release first (see the Installation section of dr_usb_backup.md), then run setup
+# (it will auto-create ventoy.json). The script finds the release VERSION file two folders above itself.
+bash /boot/config/plugins/dr_usb/Recovery-ISO/scripts/setup_ventoy_usb.sh
 
 
 The script will:
@@ -90,7 +87,8 @@ to make booting easier.
 3. **At prompt, type:** `mountall`.  
 4. **Run lsblk to see what 'sd{x}' the ventoy partition is mounted
 5. **Run:** `bash /mnt/sdX1/unraid_recovery/move_dr_to_unraid.sh`
-6. **When complete, type:** `poweroff`
+6. **Review the drive, the backup time and any verification warnings, then type `RESTORE` to continue** (Enter cancels). If files on the backup failed their hash checks they are listed first and you must type `OVERRIDE` to go on
+7. **When complete, type:** `poweroff`
 
 The entire process takes 2-3 minutes after boot.
 
@@ -167,6 +165,7 @@ Without this setting, users would have to manually remount the partition, adding
 - **Ventoy** - Multi-boot USB solution
 - **SystemRescue** - Arch-based rescue environment. Will download in creation.  
 - **fatlabel** - Modern FAT32 label tool (native in SystemRescue)
+- **syslinux_linux / mbr.bin** - Boot-loader tools taken from the backup itself (the same files Unraid's `make_bootable_linux` uses)
 - **SHA512** - Cryptographic verification of ISO integrity
 
 ### Security

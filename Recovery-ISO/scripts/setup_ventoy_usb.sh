@@ -9,10 +9,12 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Read script version from VERSION file (format: SCRIPT_VERSION=x.y.z)
-VERSION_FILE="${SCRIPT_DIR}/VERSION"
+# Read the release version from the VERSION file (format: SCRIPT_VERSION=x.y.z)
+# The single release VERSION file lives at the root of the release (two folders above this script)
+VERSION_FILE="$(cd "${SCRIPT_DIR}/../.." && pwd)/VERSION"
 if [[ ! -f "$VERSION_FILE" ]]; then
-    echo "❌ ERROR: VERSION file not found in $SCRIPT_DIR"
+    echo "❌ ERROR: VERSION file not found at $VERSION_FILE"
+    echo "   Install the full release archive; setup_ventoy_usb.sh must stay in Recovery-ISO/scripts/ beside the release VERSION file."
     exit 1
 fi
 VERSION=$(sed -n 's/^SCRIPT_VERSION=//p' "$VERSION_FILE" | tr -d '[:space:]"')
@@ -36,6 +38,12 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -upgrade)
             UPGRADE_MODE=true
+            echo "⚠️  NOTICE: -upgrade is deprecated and may be removed in a future version."
+            echo "   It no longer changes behavior. Upgrades are now automatic: on every run against"
+            echo "   an existing USB, the script compares the Ventoy and SystemRescue versions in"
+            echo "   setup_ventoy.ini with what is on the USB and updates in place (Ventoy2Disk.sh -u,"
+            echo "   your files are kept). Just run the script without -upgrade."
+            echo
             shift
             ;;
         *)
@@ -885,12 +893,20 @@ Run the script (ensure UNRAID_DR USB plugged in also)
 STEP 5: FOLLOW THE PROMPTS
 ───────────────────────────
 The script will:
-✓ Verify your UNRAID_DR backup USB is plugged in
-✓ Check for conflicts with existing UNRAID drives
+✓ Verify exactly one UNRAID_DR backup USB is plugged in and no UNRAID drive is present
+✓ Check the backup is a complete Unraid flash drive, and verify its files against their SHA-256
+  hashes (Unraid's own .sha256 files, including previous/, and the backup's own manifest)
+✓ If any file fails verification it lists them and asks you to type OVERRIDE to go on anyway
+✓ Show you the drive and when it was last backed up, then ask you to type RESTORE
+  (press Enter to cancel; nothing has been changed up to this point)
 ✓ Change the label from UNRAID_DR to UNRAID
-✓ Make the drive bootable, the script may ask to make bootable say "Y"
-✓ Enable UEFI boot.  This script will not work with BIOS only, must have UEFI Bios
-✓ Show you when it's complete
+✓ Enable UEFI boot (EFI- becomes EFI) and install the boot loader.  Needs a UEFI BIOS.
+✓ Verify the result and show you when it's complete
+
+If anything fails after the label is changed, the script puts everything back so the USB
+is a normal UNRAID_DR backup again, and you can safely run it again.  There is no
+prompt to answer for the boot loader - the script does that step itself.
+Once you reboot with the restored drive there is no going back.
 
 Note: You may see errors on hidden(2048) on syslinux/MBR.
 This is because I use modern partition scheme
@@ -924,6 +940,19 @@ Problem: Can't find the script after mountall
 Problem: "No USB drive with label UNRAID_DR found"
 → Make sure your backup USB is plugged in
 → Check the label is exactly "UNRAID_DR"
+
+Problem: "The backup is missing ..." or "does not look like a complete Unraid flash backup"
+→ The UNRAID_DR USB is incomplete (for example a backup that never finished)
+→ Nothing was changed.  Do not use this USB; use the original if it can be repaired
+
+Problem: "file(s) on the backup FAILED verification"
+→ Those files on the UNRAID_DR USB do not match their hashes: the backup may be damaged
+→ Nothing has been changed.  Enter cancels; typing OVERRIDE restores it anyway (it may not boot
+  or may have wrong settings, so only do that if you have no better option)
+
+Problem: "The restore did NOT complete"
+→ The script already put the USB back to a normal UNRAID_DR backup
+→ Read the error above it, fix the cause, and run the script again
 
 Problem: "A drive with label UNRAID already exists"
 → Remove the existing UNRAID USB first
