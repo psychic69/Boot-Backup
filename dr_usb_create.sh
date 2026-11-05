@@ -515,6 +515,9 @@ fi
 remove_old_successful_logs "${LOG_DIR}/logs" "usb-create-*.log" "${LOG_FILE}" "CREATE** script completed."
 
 log_message "INFO: Starting UNRAID DR USB **CREATE** script (Interactive)"
+if [ "$DEBUG" = true ] || [ "$USE_TEST_FILE" = true ]; then
+    log_message "INFO: DEBUG/TEST MODE: extra detail is logged and NOTHING will be formatted or changed. Run without -debug/-lsblk to create the USB."
+fi
 log_message "INFO: Configuration parameters:"
 if [ "$DR_USB_INI_LOADED" = true ]; then
     log_message "INFO:   Settings file: $DR_USB_INI"

@@ -71,7 +71,7 @@ These flags are for development and testing. You can run them from SSH:
 # Example of running with debug mode (the full menu and prompts run, but no drive is changed)
 bash /boot/config/plugins/dr_usb/dr_usb_create.sh -debug
 
--debug: Enables verbose logging. Prints extra "DEBUG:" lines to the log file to help trace the script's logic.
+-debug: Enables verbose logging (extra "DEBUG:" lines) AND makes this a dry run: the menu and prompts run, but no drive is changed. Run without -debug to actually create the USB.
 -lsblk: Forces the script to use a local file named test-lsblk in the current directory, instead of running the real lsblk command. This is for synthetic testing and never changes a drive.
 
 FAQ

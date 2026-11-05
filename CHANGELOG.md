@@ -45,6 +45,7 @@ All notable changes to the Unraid Boot Backup Suite are documented in this file.
   - `dr_usb_create.sh` writes its own log, `usb-create-DATE.log`, separate from `boot-check-*.log`; when a new create log is
     written, earlier create logs that finished successfully are removed (failed ones are kept)
   - `log_message` before logging starts now prints to stderr only for both scripts (create no longer also writes `/tmp/dr_usb_create.log`)
+  - `-debug` / `-lsblk` on `dr_usb_create.sh` now print a startup line saying nothing will be formatted (they were always dry runs); documented in `Docs/dr_usb_create.md`
   - Automated tests: `Unit Test/run_tests.sh` runs 16 `test_*.sh` files (modules, USB menu, format logic with stubbed disk tools,
     startup checks, remote config, create/backup end to end against sample `lsblk` data in `Unit Test/fixtures/`, and the release build)
   - Docs updated for the new install (extract the archive; User Script becomes a one-line wrapper) and settings
