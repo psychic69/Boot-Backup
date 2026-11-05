@@ -572,7 +572,9 @@ find_and_mount_ventoy() {
         # Debug: Show what lsblk found
         if [ -z "$ventoy_info" ]; then
             echo "Sleeping for 10 seconds to allow system to recognize new Ventoy USB..."
-            sleep 10 
+            sleep 10
+            # Look again after the wait (the first lookup ran before the partition appeared)
+            ventoy_info=$(lsblk -b -P -o NAME,UUID,FSTYPE,SIZE,MOUNTPOINT,LABEL,TRAN 2>/dev/null | grep 'LABEL="Ventoy"' | head -1)
             echo "DEBUG: lsblk output with Ventoy label:"
             lsblk -b -P -o NAME,UUID,FSTYPE,SIZE,MOUNTPOINT,LABEL,TRAN 2>/dev/null | grep -i ventoy || echo "  (no matches)"
             echo "DEBUG: All partition labels:"

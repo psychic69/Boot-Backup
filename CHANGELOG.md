@@ -153,6 +153,9 @@ All notable changes to the Unraid Boot Backup Suite are documented in this file.
   - New helpers: `download_ventoy`, `resolve_ventoy_disk`, `get_installed_ventoy_version`,
     `update_ventoy_in_place`, `preflight_upgrade_check`, `remove_old_sysrescue_isos`
   - Fixed a typo (`echo"`) in the "Sleeping for 10 seconds" message that would abort the script
+  - Fixed: after a fresh Ventoy install the script waited 10 seconds for the new `Ventoy` partition but never looked
+    again, so it failed with "Could not find Ventoy partition on Unraid" even though the partition was present
+    (`find_and_mount_ventoy`); it now repeats the lookup after the wait
 - Fixed `ventoy.json` generation so Ventoy honors it (`create_ventoy_json`):
   - Control values are now strings (`"30"`, was number `30`), as Ventoy requires
   - Each control key is in its own object (was several keys in one object)

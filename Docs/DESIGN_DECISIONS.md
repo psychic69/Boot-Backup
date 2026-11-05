@@ -287,6 +287,12 @@ drive.**
 - **Why:** the menu entry never showed as intended for months. Most likely causes: a stale file was kept by default, a
   numeric timeout, and several keys in one object.
 
+#### D-1.2.0-29 — The Ventoy partition lookup is repeated after the wait
+- **Decision:** `find_and_mount_ventoy` runs the `lsblk` lookup again after its 10-second wait.
+- **Why:** found in the first real-hardware run: the lookup ran once, before the partition had appeared; the script waited,
+  printed debug output that showed the partition, then still aborted because the result variable was never refreshed.
+  A longer retry loop was not added; revisit only if a slow partition scan shows up in testing.
+
 #### D-1.2.0-26 — The script version is read from `VERSION`, not hardcoded
 - **Decision:** `setup_ventoy_usb.sh` extracts `SCRIPT_VERSION` from the release `VERSION` file with `sed` (the file is
   not sourced) and validates it as `x.y` or `x.y.z`.
