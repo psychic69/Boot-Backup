@@ -16,7 +16,14 @@ REQUIRED_BOOT_FILES="bzimage bzroot bzmodules"
 HASH_FAILURES=()
 
 # --- Print the SHA-256 of one file (hash only) ---
+# When HASH_BYPASS_CACHE=true (the scrub sets it), the kernel is first told to forget this one file's cached pages
+# (GNU dd iflag=nocache count=0), so the hash is read from the drive itself, not RAM. Other files and other
+# workloads on the server are untouched. If dd cannot do it, the hash is still computed from whatever is available.
+HASH_BYPASS_CACHE="${HASH_BYPASS_CACHE:-false}"
 sha256_of() {
+    if [ "$HASH_BYPASS_CACHE" = true ]; then
+        dd if="$1" iflag=nocache count=0 2>/dev/null || CACHE_BYPASS_FAILED=true
+    fi
     sha256sum -- "$1" 2>/dev/null | awk '{print $1}'
 }
 

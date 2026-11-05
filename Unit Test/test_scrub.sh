@@ -7,7 +7,7 @@ source "$REPO_ROOT/lib/logging.sh"; source "$REPO_ROOT/lib/drives.sh"; source "$
 source "$REPO_ROOT/lib/config.sh"; source "$REPO_ROOT/lib/remote.sh"
 echo "test_scrub"
 LOG_FILE=""; DEBUG=false; SSH_KEY_TMP=""
-load_fns "$REPO_ROOT/dr_usb_scrub.sh" add_hash_findings scrub_live scrub_local_backup scrub_remote_backup report_results main_scrub
+load_fns "$REPO_ROOT/dr_usb_scrub.sh" report_cache_bypass add_hash_findings scrub_live scrub_local_backup scrub_remote_backup report_results main_scrub
 log_message() { echo "$1"; }
 declare -a current_drive_state FINDINGS WARNINGS
 
@@ -55,6 +55,9 @@ setup() {
 cd "$TMP_DIR"
 
 # ---------------- live /boot ----------------
+# the scrub reports whether files were read from the drive (cache bypass)
+setup; CACHE_BYPASS_FAILED=false; quiet scrub_live; assert_contains "bypass reported" "$OUT" "read from the drive itself"
+setup; CACHE_BYPASS_FAILED=true; quiet report_cache_bypass; assert_contains "bypass failure warned" "$OUT" "Could not bypass the file cache"
 setup; quiet scrub_live; assert_eq "healthy live /boot: ok" "0" "$?"; assert_eq "no findings" "0" "${#FINDINGS[@]}"
 setup; echo bad >> "$BOOT_DIR/bzroot"; quiet scrub_live
 assert_eq "corrupted live bzroot: fails" "1" "$?"; assert_eq "one finding" "1" "${#FINDINGS[@]}"

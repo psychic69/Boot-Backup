@@ -77,6 +77,19 @@ add_hash_findings() {
     done
 }
 
+# --- Make the checks read the real flash drive, not RAM ---
+# Files read recently (by a backup, for example) stay in the Linux page cache, so hashing them would test RAM and
+# could miss damage on the drive. lib/integrity.sh evicts each file's cached pages just before hashing it.
+HASH_BYPASS_CACHE=true
+CACHE_BYPASS_FAILED=false
+report_cache_bypass() {
+    if [ "$CACHE_BYPASS_FAILED" = true ]; then
+        log_message "WARNING: Could not bypass the file cache for some files (needs GNU dd); a clean result may reflect RAM rather than the drive."
+    else
+        log_message "INFO: Each file was read from the drive itself (its cached copy was dropped first), not from RAM."
+    fi
+}
+
 # --- Step 1: the live Unraid flash drive ---
 scrub_live() {
     log_message "INFO: ===== CHECKING THE LIVE UNRAID FLASH DRIVE (${BOOT_DIR}) ====="
@@ -85,7 +98,11 @@ scrub_live() {
         FINDINGS+=("LIVE ${BOOT_DIR}|${BOOT_DIR}|IS NOT MOUNTED|||")
         return 1
     fi
-    if ! verify_boot_hashes "${BOOT_DIR}"; then
+    CACHE_BYPASS_FAILED=false
+    local rc=0
+    verify_boot_hashes "${BOOT_DIR}" || rc=1
+    report_cache_bypass
+    if [ "$rc" -ne 0 ]; then
         add_hash_findings "LIVE ${BOOT_DIR}"
         return 1
     fi
@@ -131,6 +148,7 @@ scrub_local_backup() {
         mounted_here=true
     fi
 
+    CACHE_BYPASS_FAILED=false
     local problems=0
     if ! verify_boot_hashes "$mp"; then
         add_hash_findings "BACKUP USB"
@@ -141,6 +159,7 @@ scrub_local_backup() {
         1) add_hash_findings "BACKUP USB"; problems=1 ;;
         2) WARNINGS+=("The backup USB has no ${BACKUP_MANIFEST_NAME}: config/ and the other small files were not checked (it is written by the next local backup).") ;;
     esac
+    report_cache_bypass
 
     if [ "$mounted_here" = true ]; then
         run_logged "umount" umount "$mp" || log_message "WARNING: Could not unmount ${mp}."

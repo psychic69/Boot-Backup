@@ -61,6 +61,10 @@ All notable changes to the Unraid Boot Backup Suite are documented in this file.
     on its own terms (Unraid's hashes plus `DR_MANIFEST.sums`, the same checks the restore makes). The remote mirror is
     compared with an rsync checksum dry run limited to the Unraid-hashed files, which works with the write-only `rrsync` key
     because the destination only reports what differs
+  - The scrub reads the drive itself, not RAM: just before hashing each file of the live `/boot` or a local backup USB it
+    drops that one file's cached pages (`dd iflag=nocache count=0`; nothing else on the server is touched). A first test
+    run finished in 8 s because the files had just been read by the create. If `dd` cannot do it, the scrub warns that a
+    clean result may reflect RAM
   - A failing scrub is loud and specific: a banner, then per problem the area (`LIVE /boot`, `BACKUP USB`, `REMOTE MIRROR`),
     the file, the problem, the full expected and actual hash and the size, then what to do; non-zero exit and an Unraid
     notification. Everything is also written to `scrub-*.log` (rotated with `SNAPSHOTS` / `RETENTION_DAYS`)

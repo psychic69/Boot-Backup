@@ -69,4 +69,16 @@ unm_line=$(grep -n 'Unmounting \$clone_source from' "$REPO_ROOT/lib/clone.sh" | 
 rg_gate=$(grep -n 'verify_boot_hashes "\$BOOT_DIR"' "$REPO_ROOT/dr_usb_backup.sh" | head -1 | cut -d: -f1)
 rg_copy=$(grep -n 'rsync "${rsync_args\[@\]}"' "$REPO_ROOT/dr_usb_backup.sh" | head -1 | cut -d: -f1)
 [ -n "$rg_gate" ] && [ -n "$rg_copy" ] && [ "$rg_gate" -lt "$rg_copy" ] && pass "remote_backup verifies the source before rsync" || fail "remote_backup verifies the source before rsync (not wired yet?)"
+
+# ---- optional per-file cache bypass (used by the scrub) ----
+bf="$TMP_DIR/bypass_file"; echo data > "$bf"
+DD_LOG="$TMP_DIR/dd_log"; : > "$DD_LOG"
+dd() { echo "dd $*" >> "$DD_LOG"; return "${DD_RC:-0}"; }
+HASH_BYPASS_CACHE=false; CACHE_BYPASS_FAILED=false
+sha256_of "$bf" >/dev/null; assert_eq "bypass off: dd not called" "0" "$(wc -l < "$DD_LOG" | tr -d ' ')"
+HASH_BYPASS_CACHE=true
+h=$(sha256_of "$bf"); assert_eq "bypass on: hash still correct" "$(sha_of "$bf")" "$h"
+assert_contains "bypass on: dd evicts this file only" "$(cat "$DD_LOG")" "if=$bf iflag=nocache count=0"
+DD_RC=1; sha256_of "$bf" >/dev/null; assert_eq "dd failure is flagged" "true" "$CACHE_BYPASS_FAILED"
+unset -f dd; HASH_BYPASS_CACHE=false
 finish

@@ -271,6 +271,18 @@ drive.**
 
 ### F. Recovery USB (Ventoy) tooling
 
+#### D-1.2.0-30 — The scrub bypasses the file cache one file at a time
+- **Decision:** with `HASH_BYPASS_CACHE=true` (set only by `dr_usb_scrub.sh`), `sha256_of` in `lib/integrity.sh` first runs
+  `dd if=<file> iflag=nocache count=0`, which tells the kernel to drop that one file's cached pages, then hashes it. If `dd`
+  cannot do this the scrub warns that a clean result may reflect RAM; the backup preflight and the restore are unchanged.
+- **Why:** found in the first real-hardware run: the live scrub took 8 s for about 2.3 GB, far faster than a USB stick can
+  read, because the create had just read those files and they were in RAM. Hashing RAM cannot detect damage on the flash
+  drive, which is the scrub's whole purpose. Unit tests use plain files and could not show this.
+- **Verified on the owner's Unraid server:** after the `dd` evict, `sha256sum /boot/bzmodules` (765 MB) took 43 s.
+- **Rejected:** writing `3` to `/proc/sys/vm/drop_caches` (first fix, same day) is a hammer: it evicts the cache for
+  every file on a large, busy server. `O_DIRECT` reads (FAT support less certain) and remounting `/boot` (risky) were also rejected.
+- **Limits:** the remote mirror is hashed by rsync on the destination, so its cache is not touched from here.
+
 #### D-1.2.0-24 — Ventoy and SystemRescue versions come from `setup_ventoy.ini`; upgrades happen in place
 - **Decision:** on every run against an existing USB, the installed Ventoy (`Ventoy2Disk.sh -l`) is compared with
   `VENTOY_VERSION` and updated with `-u` (files kept); an older SystemRescue ISO is replaced and the old files removed

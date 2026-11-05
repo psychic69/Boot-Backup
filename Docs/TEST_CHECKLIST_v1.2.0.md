@@ -54,7 +54,8 @@ Run on a Linux machine or container (not the Unraid server; some tests need `pyt
 - [ ] `time bash /boot/config/plugins/dr_usb/dr_usb_scrub.sh; echo "exit=$?"`
 - **Expect:** `Boot file hashes OK (N verified, 0 warning(s))`, then `SCRUB CLEAN - no problems found.` and `exit=0`.
 - [ ] `N` equals the number of Unraid hash files: `ls /boot/*.sha256 /boot/previous/*.sha256 | wc -l`.
-- [ ] Note how long it took (it reads roughly 2-3 GB): ____
+- [ ] **Expect** a line `Each file was read from the drive itself (its cached copy was dropped first), not from RAM.`
+- [ ] Note how long it took (it reads roughly 2-3 GB from a USB stick, so expect about a minute or more, not seconds): ____
 - [ ] A log exists: `ls -t /boot/logs/unraid-dr/logs/ | head -3` shows `scrub-*.log`.
 
 ## Step 3 - Local backup to the `UNRAID_DR` USB
