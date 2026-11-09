@@ -116,7 +116,7 @@ bash /boot/config/plugins/dr_usb/Recovery-ISO/scripts/setup_ventoy_usb.sh
 **Emergency Recovery (when main USB fails):**
 1. Boot SystemRescue from Ventoy USB
 2. Type: `mountall`
-3. Type: `bash /mnt/sdX1/unraid_recovery/move_dr_to_unraid.sh`
+3. Type: `bash /mnt/VentoyPart/unraid_recovery/move_dr_to_unraid.sh` (older recovery USBs may mount as `/mnt/sdX1`)
 
 ## Script Dependencies
 

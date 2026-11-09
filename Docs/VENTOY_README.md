@@ -84,13 +84,82 @@ to make booting easier.
 
 1. **Boot from Ventoy USB**
 2. **Select "Unraid Recovery - SystemRescue"**
-3. **At prompt, type:** `mountall`.  
-4. **Run lsblk to see what 'sd{x}' the ventoy partition is mounted
-5. **Run:** `bash /mnt/sdX1/unraid_recovery/move_dr_to_unraid.sh`
+3. **At prompt, type:** `mountall`
+4. **The Ventoy partition is mounted at `/mnt/VentoyPart`** (run `lsblk` to confirm; see the reference run below)
+5. **Run:** `bash /mnt/VentoyPart/unraid_recovery/move_dr_to_unraid.sh`
 6. **Review the drive, the backup time and any verification warnings, then type `RESTORE` to continue** (Enter cancels). If files on the backup failed their hash checks they are listed first and you must type `OVERRIDE` to go on
 7. **When complete, type:** `poweroff`
 
 The entire process takes 2-3 minutes after boot.
+
+### Reference: what a real SystemRescue session looks like
+
+Captured on real hardware (test machine with an NVMe disk, the Ventoy USB and the `UNRAID_DR` stick plugged in). Your device
+names will differ; what matters is the pattern.
+
+```
+[root@sysrescue ~]# lsblk
+NAME           MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+loop0            7:0    0   1.1G  1 loop /run/archiso/sfs/airootfs
+sda              8:0    1  14.6G  0 disk
+├─sda1           8:1    1  14.6G  0 part
+│ ├─ventoy     253:0    0   1.3G  1 dm   /run/archiso/bootmnt
+│ └─VentoyPart 253:1    0  14.6G  0 dm
+└─sda2           8:2    1    32M  0 part
+sdb              8:16   1  56.3G  0 disk
+└─sdb1           8:17   1  56.3G  0 part
+nvme0n1        259:0    0 119.2G  0 disk
+├─nvme0n1p1    259:1    0   300M  0 part
+└─nvme0n1p2    259:2    0 118.9G  0 part
+[root@sysrescue ~]# mountall
+mounting /dev/nvme0n1p1 to /mnt/nvme0n1p1... OK
+mounting /dev/nvme0n1p2 to /mnt/nvme0n1p2... OK
+bind mounted /dev to /mnt/nvme0n1p2/dev
+bind mounted /sys to /mnt/nvme0n1p2/sys
+bind mounted /proc to /mnt/nvme0n1p2/proc
+mounting /dev/sda1 to /mnt/sda1... mount: /mnt/sda1: fsconfig() failed: /dev/sda1: Can't open blockdev.
+       dmesg(1) may have more information after failed mount system call.
+error mounting /dev/sda1 to /mnt/sda1 (options )
+mounting /dev/sda2 to /mnt/sda2... OK
+mounting /dev/sdb1 to /mnt/sdb1... OK
+mounting /dev/mapper/VentoyPart to /mnt/VentoyPart... OK
+[root@sysrescue ~]# lsblk
+NAME           MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+loop0            7:0    0   1.1G  1 loop /run/archiso/sfs/airootfs
+sda              8:0    1  14.6G  0 disk
+├─sda1           8:1    1  14.6G  0 part
+│ ├─ventoy     253:0    0   1.3G  1 dm   /run/archiso/bootmnt
+│ └─VentoyPart 253:1    0  14.6G  0 dm   /mnt/VentoyPart
+└─sda2           8:2    1    32M  0 part /mnt/sda2
+sdb              8:16   1  56.3G  0 disk
+└─sdb1           8:17   1  56.3G  0 part /mnt/sdb1
+nvme0n1        259:0    0 119.2G  0 disk
+├─nvme0n1p1    259:1    0   300M  0 part /mnt/nvme0n1p1
+└─nvme0n1p2    259:2    0 118.9G  0 part /mnt/nvme0n1p2
+[root@sysrescue ~]# cd /mnt/VentoyPart/
+[root@sysrescue /mnt/VentoyPart]# ls
+CURRENT_VERSION               systemrescue-13.02-amd64.iso.sha512  UNRAID_RECOVERY_INSTRUCTIONS.txt
+systemrescue-13.02-amd64.iso  unraid_recovery                      ventoy
+[root@sysrescue /mnt/VentoyPart]# cd unraid_recovery/
+[root@sysrescue /mnt/VentoyPart/unraid_recovery]# ls
+move_dr_to_unraid.sh
+```
+
+How to read it:
+
+- **The Ventoy USB is `/mnt/VentoyPart`.** Ventoy exposes its data partition through the device-mapper (`/dev/mapper/VentoyPart`),
+  so it does **not** show up as a plain `/mnt/sdX1`. Run the script from there:
+  `bash /mnt/VentoyPart/unraid_recovery/move_dr_to_unraid.sh`. *Historical note:* earlier recovery USBs mounted as
+  `/mnt/sdX1` (for example `/mnt/sdb1`); if `/mnt/VentoyPart` does not exist, run `ls /mnt/` and look for the folder
+  containing `unraid_recovery`.
+- **One error during `mountall` is normal.** `mounting /dev/sda1 ... Can't open blockdev` appears because Ventoy already holds the
+  USB's big partition (`sda1`) for its own boot image. Ignore it; the same space is mounted fine as `VentoyPart`. The small
+  `sda2` (Ventoy's 32 MB EFI partition) also mounts.
+- **`mountall` mounts everything**, including this machine's own disks (`nvme0n1p1`, `nvme0n1p2`) and the `UNRAID_DR` stick
+  (`sdb1` here). That is expected: `move_dr_to_unraid.sh` unmounts the backup partition itself before it changes anything.
+  The machine's own disks are never touched.
+- **Finding the backup stick:** it is the small removable disk that is not the Ventoy USB (`sdb`, 56.3G, in this run). You do not
+  have to pick it; the script finds the one USB drive labeled `UNRAID_DR` and shows it for confirmation before asking for `RESTORE`.
 
 ## Why This Approach Works
 
@@ -135,9 +204,9 @@ umount /mnt/ventoy
 ### Recovery Issues
 
 **"Can't find the recovery script"**
-- After `mountall`, type: `ls /mnt/`
-- Try each mount: `ls /mnt/sdb1/`
-- Look for `unraid_recovery` folder
+- After `mountall`, type: `ls /mnt/VentoyPart/`
+- Look for the `unraid_recovery` folder
+- Older recovery USBs mounted as `/mnt/sdX1`: type `ls /mnt/` and try each mount (`ls /mnt/sdb1/`)
 
 **"No USB drive with label UNRAID_DR found"**
 - Verify backup USB is plugged in
@@ -152,7 +221,7 @@ umount /mnt/ventoy
 
 **"Ventoy partition mounted read-only"**
 - This shouldn't happen with `VTOY_LINUX_REMOUNT: "1"`
-- If it does, manually remount: `mount -o remount,rw /dev/sdX1 /mnt/sdX1`
+- If it does, manually remount: `mount -o remount,rw /dev/mapper/VentoyPart /mnt/VentoyPart` (older USBs: `mount -o remount,rw /dev/sdX1 /mnt/sdX1`)
 
 ## Technical Details
 

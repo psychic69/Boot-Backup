@@ -876,17 +876,18 @@ STEP 3: MOUNT VENTOY PARTITION
 ───────────────────────────────
 At the SystemRescue prompt, type:
 
-1. The system will map the ventoy base partition into /dev/mapper
-2. run mkdir /mnt/script
-3. ls /dev/mapper and find the ventoy partition.  It should be the only sdx1 (like sdb1)
-4. Mount the ventoy partition:  mount /dev/mapper/sdb1 /mnt/script
-5. If you cannot find the /dev/mapper, run mountall and it should loopback mount it to /dev/sdb1
+   mountall
+
+SystemRescue mounts the Ventoy USB at /mnt/VentoyPart. Run: ls /mnt/VentoyPart
+(An error such as "/dev/sda1: Can't open blockdev" is normal: Ventoy holds that partition.)
+If /mnt/VentoyPart does not exist (older versions mounted it as /mnt/sdb1, /mnt/sdc1, ...),
+run lsblk, then: ls /mnt/ and look for the folder that contains unraid_recovery.
 
 STEP 4: RUN THE RECOVERY SCRIPT
 ────────────────────────────────
 Change to the directory with the script
 
-   cd /mnt/script/unraid_recovery
+   cd /mnt/VentoyPart/unraid_recovery
 
 Run the script (ensure UNRAID_DR USB plugged in also)
 
@@ -934,10 +935,9 @@ TROUBLESHOOTING
 ───────────────
 
 Problem: Can't find the script after mountall
-→ Type: ls /mnt/
-→ Look for mount points like sdb1, sdc1, etc.
+→ Type: ls /mnt/VentoyPart/ and look for the "unraid_recovery" folder
+→ If /mnt/VentoyPart does not exist, type: ls /mnt/ and look for mount points like sdb1, sdc1, etc.
 → Type: ls /mnt/sdb1/ (replace with actual mount point)
-→ Look for "unraid_recovery" folder
 
 Problem: "No USB drive with label UNRAID_DR found"
 → Make sure your backup USB is plugged in
@@ -1353,8 +1353,8 @@ echo "USAGE FOR END USERS:"
 echo "  1. Boot from this Ventoy USB"
 echo "  2. Select SystemRescue from menu"
 echo "  3. At the prompt, type: mountall"
-echo "  4. Run: bash /mnt/sdX1/unraid_recovery/move_dr_to_unraid.sh"
-echo "     (Replace X with the actual drive letter)"
+echo "  4. Run: bash /mnt/VentoyPart/unraid_recovery/move_dr_to_unraid.sh"
+echo "     (older versions mounted the USB as /mnt/sdX1 instead; run ls /mnt/ if VentoyPart is missing)"
 echo "  5. Follow the prompts"
 echo "  6. Type: poweroff when done"
 echo

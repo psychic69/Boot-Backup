@@ -191,7 +191,7 @@ ls -t /boot/logs/unraid-dr/logs/ | head -1
 4. **Boot** from recovery USB
 5. **Select** "Unraid Recovery - SystemRescue"
 6. **Type:** `mountall`
-7. **Type:** `bash /mnt/sdX1/unraid_recovery/move_dr_to_unraid.sh`
+7. **Type:** `bash /mnt/VentoyPart/unraid_recovery/move_dr_to_unraid.sh`  (older recovery USBs may mount as `/mnt/sdX1` instead)
 8. **Check** the drive and backup time shown, then **type** `RESTORE` (Enter cancels)
 9. **Type:** `poweroff` when done
 10. **Remove** both USBs

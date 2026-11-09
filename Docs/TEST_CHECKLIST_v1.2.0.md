@@ -125,7 +125,7 @@ Follow [the remote backup guide](dr_usb_backup.md#remote-backup--remote) steps 1
 - [ ] Create a Ventoy recovery USB with `setup_ventoy_usb.sh` (a spare Ventoy USB). **Expect:** `UNRAID_RECOVERY_INSTRUCTIONS.txt` mentions the `RESTORE` and `OVERRIDE` prompts.
 - [ ] Use the spare `UNRAID_DR` stick from step 5 (it must contain a real backup), plug it and the Ventoy USB into a **test machine or VM** that has **no** drive labeled `UNRAID`.
 - [ ] Boot the Ventoy USB, pick "Unraid Recovery - SystemRescue", run `mountall`, then
-      `bash /mnt/sdX1/unraid_recovery/move_dr_to_unraid.sh`.
+      `bash /mnt/VentoyPart/unraid_recovery/move_dr_to_unraid.sh` (older recovery USBs mounted as `/mnt/sdX1`).
 - **Expect, in order:**
   - [ ] `No conflicting 'UNRAID' drive found`, then `Found one and only one matching USB drive`
   - [ ] `Backup contents look complete`

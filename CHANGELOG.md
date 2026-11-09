@@ -14,6 +14,12 @@ All notable changes to the Unraid Boot Backup Suite are documented in this file.
     `/dev/disk/by-label/UNRAID` must point at the restored partition
   - The label is still strictly required (Unraid will not boot without it); a failure prints what each method returned. See D-1.2.1-01
   - `test_move_dr.sh` now has 166 checks, including the warning-line case, the fallback chain, the retry/backoff and the udev check
+- **Recovery paths corrected everywhere.** After `mountall` the Ventoy USB is at `/mnt/VentoyPart`, not `/mnt/sdX1`; the run
+  command is now `bash /mnt/VentoyPart/unraid_recovery/move_dr_to_unraid.sh`. Updated in `README.md`, `GETTING_STARTED.md`,
+  `Docs/VENTOY_README.md`, `Docs/PROJECT_STRUCTURE.md`, the test checklist, and the instructions text that
+  `setup_ventoy_usb.sh` writes to the USB (which also had a stale manual `/dev/mapper` + `/mnt/script` procedure). Each keeps a
+  short note that older recovery USBs mounted as `/mnt/sdX1`. `Docs/VENTOY_README.md` gains a captured real SystemRescue session
+  (including the normal `sda1 ... Can't open blockdev` message during `mountall`)
 - Existing recovery USBs: run `setup_ventoy_usb.sh` again; it sees `CURRENT_VERSION` 1.2.0 on the USB and offers the upgrade
   to 1.2.1, which copies the fixed `move_dr_to_unraid.sh` onto it
 

@@ -368,19 +368,18 @@ Ventoy USB/
 
 4. **Find and Run the Recovery Script**
    ```bash
-   # List mount points to find the Ventoy USB
-   ls /mnt/
-   
-   # Usually shows: sdb1, sdc1, sdd1, etc.
-   # Look for the one with unraid_recovery folder
-   ls /mnt/sdb1/
-   
-   # Use lsblk to confirm which device is the Ventoy partition
+   # The Ventoy USB is mounted at /mnt/VentoyPart; confirm the folder is there
+   ls /mnt/VentoyPart/unraid_recovery/
+
+   # Use lsblk to see every mount if you want to check
    lsblk
-   
-   # Run the recovery script (replace sdb1 with your actual mount point)
-   bash /mnt/sdb1/unraid_recovery/move_dr_to_unraid.sh
+
+   # Run the recovery script
+   bash /mnt/VentoyPart/unraid_recovery/move_dr_to_unraid.sh
    ```
+   A "Can't open blockdev" error for `/dev/sda1` during `mountall` is normal (Ventoy holds that partition; it is mounted as
+   `VentoyPart`). Older recovery USBs may mount as `/mnt/sdX1` (for example `/mnt/sdb1`) instead; see
+   [`Docs/VENTOY_README.md`](Docs/VENTOY_README.md) for a captured session.
 
 5. **Follow the Script**
    - The script will automatically:
@@ -616,9 +615,8 @@ The functionality remains the same, just with clearer names and improved separat
 - **Solution:** 
   ```bash
   ls /mnt/
-  ls /mnt/sdb1/
-  ls /mnt/sdc1/
-  # Look for unraid_recovery folder
+  ls /mnt/VentoyPart/
+  # Look for unraid_recovery folder. Older recovery USBs mounted as /mnt/sdb1, /mnt/sdc1, etc.
   ```
 
 **Problem:** "Transport type not USB" error
@@ -627,7 +625,7 @@ The functionality remains the same, just with clearer names and improved separat
 
 **Problem:** Ventoy partition mounted read-only
 - **Solution:** Ensure `VTOY_LINUX_REMOUNT: "1"` is in ventoy.json
-- **Manual fix:** `mount -o remount,rw /dev/sdX1 /mnt/sdX1`
+- **Manual fix:** `mount -o remount,rw /dev/mapper/VentoyPart /mnt/VentoyPart` (older USBs: `mount -o remount,rw /dev/sdX1 /mnt/sdX1`)
 
 ### Setup Issues
 
