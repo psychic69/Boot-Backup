@@ -34,6 +34,10 @@ MBR_MAX_BYTES=447
 # Written by dr_usb_backup.sh onto the backup USB (see lib/integrity.sh): hashes of config/, syslinux/, EFI-/ etc.
 MANIFEST_NAME="DR_MANIFEST.sums"
 MAX_PROBLEMS_SHOWN=20
+# Unraid will not boot unless the flash drive is labelled exactly UNRAID, so the label is confirmed with retries.
+# Seconds to wait before each retry if the first read does not show the label (2+4+8+16 = 30s in total).
+LABEL_RETRY_DELAYS=(2 4 8 16)
+UDEV_LABEL_DIR="/dev/disk/by-label"   # udev's label symlinks (a variable so the tests can point it elsewhere)
 
 # --- State shared between steps ---
 BACKUP_PART=""        # e.g. /dev/sdc1
@@ -87,6 +91,7 @@ require_environment() {
         return 1
     fi
     local missing=() cmd
+    # (blkid, blockdev and udevadm are used when present but are not required: get_label falls back to lsblk / fatlabel)
     for cmd in lsblk fatlabel mount umount mountpoint findmnt dd cmp od wc mktemp awk; do
         command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
     done
@@ -458,6 +463,83 @@ confirm_override() {
     confirm_word "OVERRIDE" "Type OVERRIDE to restore anyway (press Enter to cancel): "
 }
 
+# --- Label reading (the label is what makes Unraid boot, so it is read carefully) ---
+# Make sure what is on the stick is what we read back: flush writes and cached blocks, let udev finish.
+flush_device() {
+    sync
+    command -v blockdev >/dev/null 2>&1 && blockdev --flushbufs "$BACKUP_PART" 2>/dev/null
+    command -v udevadm >/dev/null 2>&1 && udevadm settle --timeout=10 2>/dev/null
+    return 0
+}
+
+# Print the trimmed label of a partition. fatlabel can print a warning on stdout ("There are differences between
+# boot sector and its backup", normal after the syslinux install), so it is the last resort and only its last line is used.
+get_label() {
+    local part="${1:-$BACKUP_PART}" out=""
+    if command -v blkid >/dev/null 2>&1; then   # -p probes the device itself, bypassing udev's cache
+        out=$(blkid -p -s LABEL -o value "$part" 2>/dev/null | head -n 1 | sed 's/[[:space:]]*$//')
+    fi
+    if [ -z "$out" ]; then
+        out=$(lsblk -no LABEL "$part" 2>/dev/null | head -n 1 | sed 's/[[:space:]]*$//')
+    fi
+    if [ -z "$out" ]; then
+        out=$(fatlabel "$part" 2>/dev/null | tail -n 1 | sed 's/[[:space:]]*$//')
+    fi
+    printf '%s\n' "$out"
+}
+
+# Last resort: after udev re-reads the partition, does /dev/disk/by-label/UNRAID (what Unraid looks up at boot)
+# point at THIS partition? It must resolve to our partition: another drive labelled UNRAID does not count.
+udev_sees_label() {
+    command -v udevadm >/dev/null 2>&1 || return 1
+    udevadm trigger --action=change "$BACKUP_PART" 2>/dev/null
+    udevadm settle --timeout=10 2>/dev/null
+    local link="$UDEV_LABEL_DIR/$FINAL_LABEL" target part
+    [ -e "$link" ] || return 1
+    target=$(readlink -f "$link" 2>/dev/null)
+    part=$(readlink -f "$BACKUP_PART" 2>/dev/null)
+    [ -n "$target" ] && [ "$target" = "$part" ]
+}
+
+# Confirm the partition is labelled exactly FINAL_LABEL. Reads it, then retries with a growing wait (about 30s in
+# total), then asks udev as a final check. Sets LABEL_READ to the last label read. Returns 1 if it cannot be confirmed.
+LABEL_READ=""
+confirm_label() {
+    local delay n=0 total=${#LABEL_RETRY_DELAYS[@]}
+    flush_device
+    LABEL_READ=$(get_label "$BACKUP_PART")
+    [ "$LABEL_READ" = "$FINAL_LABEL" ] && return 0
+    for delay in "${LABEL_RETRY_DELAYS[@]}"; do
+        n=$((n + 1))
+        echo "   Label not confirmed yet (read '${LABEL_READ:-nothing}'); retrying in ${delay}s (retry $n of $total)..."
+        sleep "$delay"
+        flush_device
+        LABEL_READ=$(get_label "$BACKUP_PART")
+        [ "$LABEL_READ" = "$FINAL_LABEL" ] && return 0
+    done
+    if udev_sees_label; then
+        warn "Reading the label directly failed, but udev reports '$FINAL_LABEL' on $BACKUP_PART. Continuing."
+        LABEL_READ="$FINAL_LABEL"
+        return 0
+    fi
+    return 1
+}
+
+# What every method reports, shown when the label cannot be confirmed
+label_report() {
+    local link="$UDEV_LABEL_DIR/$FINAL_LABEL" tgt="(none)"
+    [ -e "$link" ] && tgt=$(readlink -f "$link" 2>/dev/null)
+    echo "   Label as read by each method (expected '$FINAL_LABEL'):"
+    if command -v blkid >/dev/null 2>&1; then
+        echo "     blkid:    '$(blkid -p -s LABEL -o value "$BACKUP_PART" 2>/dev/null | head -n 1)'"
+    else
+        echo "     blkid:    (not installed)"
+    fi
+    echo "     lsblk:    '$(lsblk -no LABEL "$BACKUP_PART" 2>/dev/null | head -n 1)'"
+    echo "     fatlabel: '$(fatlabel "$BACKUP_PART" 2>/dev/null | tail -n 1)'"
+    echo "     $link -> $tgt (this partition is $BACKUP_PART)"
+}
+
 # --- 3. Change the label ---
 relabel_backup() {
     echo "Changing label from '$BACKUP_LABEL' to '$FINAL_LABEL'..."
@@ -466,10 +548,9 @@ relabel_backup() {
         return 1
     fi
     RELABELED=true
-    local current
-    current=$(fatlabel "$BACKUP_PART" 2>/dev/null | head -n 1 | sed 's/[[:space:]]*$//')
-    if [ "$current" != "$FINAL_LABEL" ]; then
-        err "Label check failed: the partition is now labelled '$current'."
+    if ! confirm_label; then
+        err "Label check failed: the partition is now labelled '$LABEL_READ'."
+        label_report >&2
         return 1
     fi
     echo "✅ Label is now '$FINAL_LABEL'."
@@ -534,10 +615,9 @@ write_mbr() {
 # --- 6. Check the finished drive ---
 verify_result() {
     echo "Verifying the restored drive..."
-    local label
-    label=$(fatlabel "$BACKUP_PART" 2>/dev/null | head -n 1 | sed 's/[[:space:]]*$//')
-    if [ "$label" != "$FINAL_LABEL" ]; then
-        err "Verification failed: label is '$label', expected '$FINAL_LABEL'."
+    if ! confirm_label; then
+        err "Verification failed: label is '$LABEL_READ', expected '$FINAL_LABEL'. Unraid will not boot without it."
+        label_report >&2
         return 1
     fi
     mount_backup ro || return 1

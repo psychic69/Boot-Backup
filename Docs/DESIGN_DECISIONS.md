@@ -27,6 +27,7 @@ rejected, and what we learned about Unraid along the way. It is deliberately sep
   - [G. Testing and working rules](#g-testing-and-working-rules)
   - [Facts about Unraid that the design relies on](#facts-about-unraid-that-the-design-relies-on)
   - [Open and parked ideas](#open-and-parked-ideas)
+- [Version 1.2.1](#version-121)
 
 ---
 
@@ -366,3 +367,38 @@ Not built, not decided; listed so they are not lost. Each needs the owner's go-a
 - Stale wording in the README's description of `dr_usb_create.sh` (it mentions steps that script no longer performs).
 - **Real-hardware trials still to do:** the restore on a spare stick (UEFI and, if wanted, legacy BIOS); `rrsync` accepting every
   option the backup and scrub use; the scrub's remote checksum comparison against a real destination.
+
+---
+
+## Version 1.2.1
+
+*Patch release: found in the first real-hardware run of the restore.* The version was bumped (not left at 1.2.0) so that
+`setup_ventoy_usb.sh` sees the Ventoy USB's `CURRENT_VERSION` as older and offers the upgrade, which refreshes the copy of
+`move_dr_to_unraid.sh` on the recovery USB.
+
+### D. Restore (move_dr_to_unraid.sh)
+
+#### D-1.2.1-01 — The `UNRAID` label is confirmed strictly, read robustly, and retried for about 30 seconds
+- **Decision:** `move_dr_to_unraid.sh` reads the label through `get_label()`: `blkid -p -s LABEL -o value` first (probes the
+  device itself, no udev cache), then `lsblk -no LABEL`, then `fatlabel` using only its **last** line. `confirm_label()` flushes
+  first (`sync`, `blockdev --flushbufs`, `udevadm settle`), reads, and on any miss retries after 2, 4, 8 and 16 seconds
+  (`LABEL_RETRY_DELAYS`, about 30s in total, announced on screen). If it still cannot be confirmed, one last check runs:
+  after `udevadm trigger` and `settle`, `/dev/disk/by-label/UNRAID` must resolve (`readlink -f`) to **this** partition. If it
+  does, the script warns and continues; otherwise the restore fails, rolls back, and prints what each method returned.
+  It is used both right after the relabel and in the final verification. `blkid`, `blockdev` and `udevadm` are used when present
+  but are not required (they are util-linux/udev tools shipped with SystemRescue); `lsblk` and `fatlabel` remain required.
+- **Why:** first real-hardware failure of the restore: everything worked, then verification read the label as
+  `There are differences between boot sector and its backup.` and rolled back a good restore. After the syslinux install the FAT
+  boot sector no longer matches its backup copy, and `fatlabel` prints that warning on **stdout** (so `2>/dev/null` does not hide
+  it) before the label; the old code took the first line. Unraid will not boot a flash drive that is not labelled exactly
+  `UNRAID`, so the check must not be skipped or softened, but a quirk of one tool must not stop an emergency restore either.
+- **Alternatives rejected:**
+  - *Warn and continue when the label is unreadable* - rejected: a wrong or missing label means an unbootable server.
+  - *Only `lsblk`* - can return udev's cached (old) label right after a relabel. *Only a text filter on `fatlabel`* - breaks if the
+    wording changes.
+  - *Rewriting the boot-sector backup (copying sector 0 to sector 6 with `dd`)* to silence the warning - raw writes to a boot
+    drive for a cosmetic gain; the warning is harmless (the differences are bytes syslinux patches on purpose).
+  - *Accepting any `by-label/UNRAID` link* - rejected: with the old Unraid USB still plugged in it would point at that drive.
+  - *Dropping page caches* (as the scrub fix did) - not the cause here: the data read was current; the output was polluted.
+- **Not verified on hardware yet:** the 30s backoff and the udev last resort are covered by stubbed tests only; the next real
+  restore trial (spare stick) should confirm `blkid -p` reads `UNRAID` straight after the syslinux install.

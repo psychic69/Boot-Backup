@@ -2,6 +2,21 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
+## [1.2.1] - 2026-11-09
+
+### Fixed
+- **`move_dr_to_unraid.sh`: the `UNRAID` label check no longer fails (and rolls back) a good restore.** Found in the first
+  real-hardware run. After the syslinux install `fatlabel` prints "There are differences between boot sector and its backup."
+  on stdout, which the old check took as the label.
+  - The label is now read with `blkid -p` (falling back to `lsblk`, then `fatlabel`'s last line), and the drive is flushed first
+    (`sync`, `blockdev --flushbufs`, `udevadm settle`)
+  - A miss is retried for about 30 seconds (2/4/8/16s) with progress lines. As a last check before rolling back,
+    `/dev/disk/by-label/UNRAID` must point at the restored partition
+  - The label is still strictly required (Unraid will not boot without it); a failure prints what each method returned. See D-1.2.1-01
+  - `test_move_dr.sh` now has 166 checks, including the warning-line case, the fallback chain, the retry/backoff and the udev check
+- Existing recovery USBs: run `setup_ventoy_usb.sh` again; it sees `CURRENT_VERSION` 1.2.0 on the USB and offers the upgrade
+  to 1.2.1, which copies the fixed `move_dr_to_unraid.sh` onto it
+
 ## [1.2.0] - 2026-11-03
 
 ### Changed
@@ -117,7 +132,6 @@ All notable changes to the Unraid Boot Backup Suite are documented in this file.
   - No more `eval` on device labels (a crafted label could run commands as root), and no stale transport value
     carried between loop iterations; ends with a license-replacement reminder
   - New `Unit Test/test_move_dr.sh` (106 checks, all disk tools stubbed, devices are plain files)
-  - The recovery instructions text written by `setup_ventoy_usb.sh` and the README/guides describe the new prompts
 - **`dr_usb_create.sh`: safer, failures no longer hidden** (first pass)
   - Masked failures fixed (same `cmd | while read` bug as `dr_usb_backup.sh`): `wipefs`, `sfdisk`, `partprobe`,
     `mkfs.vfat`, `mount`, `umount` and `rsync` now report their own exit status; rsync is built as an array

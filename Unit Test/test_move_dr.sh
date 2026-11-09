@@ -29,8 +29,20 @@ fatlabel() {   # fatlabel <part>  -> print label;  fatlabel <part> <new> -> set 
     if [ $# -ge 2 ]; then [ -n "${FATLABEL_FAIL:-}" ] && return 1; [ -n "${FATLABEL_IGNORE:-}" ] || echo "$2" > "$STATE"; return 0; fi
     cat "$STATE"
 }
+blkid()      {   # blkid -p -s LABEL -o value <part>: prints the label. BLKID_EMPTY=1 prints nothing; BLKID_FAILS=N fails the first N reads
+    [ -n "${BLKID_EMPTY:-}" ] && return 2
+    local n; n=$(cat "$TMP_DIR/blkid_fails" 2>/dev/null || echo 0)   # counter kept in a file: reads run in subshells
+    if [ "$n" -gt 0 ]; then echo $((n - 1)) > "$TMP_DIR/blkid_fails"; return 2; fi
+    cat "$STATE"
+}
+blockdev()   { :; }
+udevadm()    { :; }
+sleep()      { :; }
+LABEL_RETRY_DELAYS=(0 0 0 0)
+UDEV_LABEL_DIR="$TMP_DIR/by-label"
 lsblk() {
     case "$*" in
+        *"-no LABEL"*) [ -n "${LSBLK_EMPTY:-}" ] || cat "$STATE" ;;
         *"-P -b -o NAME,MOUNTPOINT,UUID,FSTYPE,LABEL,SIZE"*) printf '%b' "${LSBLK_FULL:-}" ;;
         *"-P -o NAME,LABEL"*)                                  printf '%b' "${LSBLK_LABELS:-}" ;;
         *PKNAME*)  local p="${*: -1}"; echo "${p%[0-9]}" ;;
@@ -70,7 +82,7 @@ reset_state() {
     VERIFY_PROBLEMS=(); VERIFY_NOTES=(); NO_MANIFEST=""
     BACKUP_PART="$DEV/sdc1"; BACKUP_DISK="$DEV/sdc"; MOUNT_POINT="$MP"; WORK_DIR=""
     BACKUP_MARKER=""; EFI_STATE=""; RELABELED=false; EFI_RENAMED=false
-    FATLABEL_FAIL=""; FATLABEL_IGNORE=""; UMOUNT_RC=0; MOUNT_RC=0; FINDMNT_OUT=""; FINDMNT_ONCE=""
+    FATLABEL_FAIL=""; FATLABEL_IGNORE=""; BLKID_EMPTY=""; LSBLK_EMPTY=""; echo 0 > "$TMP_DIR/blkid_fails"; rm -rf "$UDEV_LABEL_DIR"; UMOUNT_RC=0; MOUNT_RC=0; FINDMNT_OUT=""; FINDMNT_ONCE=""
     SYSLINUX_RC=0; SYSLINUX_VERSION_RC=0; SYSLINUX_LOG="$TMP_DIR/syslinux.log"; : > "$SYSLINUX_LOG"; rm -f "$TMP_DIR/findmnt_done"
     export SYSLINUX_RC SYSLINUX_VERSION_RC SYSLINUX_LOG
     make_devices
@@ -164,6 +176,40 @@ quiet relabel_backup; assert_eq "padded label read-back still matches" "0" "$?"
 echo UNRAID > "$STATE"; make_backup_tree 447 EFI; EFI_STATE="EFI"; printf '\x80' | dd of="$DEV/sdc" bs=1 seek=446 conv=notrunc 2>/dev/null
 quiet verify_result; assert_eq "padded label passes final verification" "0" "$?"
 eval "$(declare -f fatlabel_plain | sed 's/^fatlabel_plain ()/fatlabel ()/')"
+
+# ---------------- get_label / confirm_label (the label is boot-critical: Unraid will not boot without 'UNRAID') ----------------
+# fatlabel prints "There are differences between boot sector and its backup." on STDOUT after the syslinux install.
+fatlabel_warns() { if [ $# -ge 2 ]; then echo "$2" > "$STATE"; else echo "There are differences between boot sector and its backup."; echo "  282:40/80"; cat "$STATE"; fi; }
+eval "$(declare -f fatlabel | sed 's/^fatlabel ()/fatlabel_plain2 ()/')"
+reset_state; echo UNRAID > "$STATE"
+assert_eq "get_label uses blkid" "UNRAID" "$(get_label "$BACKUP_PART")"
+fatlabel() { fatlabel_warns "$@"; }
+assert_eq "get_label ignores the fatlabel boot-sector warning" "UNRAID" "$(get_label "$BACKUP_PART")"
+BLKID_EMPTY=1; assert_eq "blkid empty: falls back to lsblk" "UNRAID" "$(get_label "$BACKUP_PART")"
+LSBLK_EMPTY=1; assert_eq "blkid and lsblk empty: fatlabel's LAST line is the label, not the warning" "UNRAID" "$(get_label "$BACKUP_PART")"
+out=$( unset -f blkid; LSBLK_EMPTY=1; get_label "$BACKUP_PART" ); assert_eq "blkid not installed: still reads the label" "UNRAID" "$out"
+# the exact failure seen on real hardware: warning on stdout while verifying after the syslinux install
+reset_state; echo UNRAID > "$STATE"; BLKID_EMPTY=1; LSBLK_EMPTY=1; make_backup_tree 447 EFI; EFI_STATE="EFI"
+printf '\x80' | dd of="$DEV/sdc" bs=1 seek=446 conv=notrunc 2>/dev/null
+quiet verify_result; assert_eq "verification passes despite the fatlabel warning" "0" "$?"
+reset_state; echo UNRAID > "$STATE"; make_backup_tree 447 EFI; EFI_STATE="EFI"; printf '\x80' | dd of="$DEV/sdc" bs=1 seek=446 conv=notrunc 2>/dev/null
+echo 2 > "$TMP_DIR/blkid_fails"; LSBLK_EMPTY=1; fatlabel() { return 1; }; quiet confirm_label; LSBLK_EMPTY=""; fatlabel() { fatlabel_warns "$@"; }; assert_eq "label unreadable at first, then read: retried and confirmed" "0" "$?"; assert_contains "retry is announced" "$OUT" "retrying in"
+reset_state; echo UNRAID_DR > "$STATE"; quiet confirm_label; assert_eq "wrong label: fails" "1" "$?"; assert_eq "wrong label: reported" "UNRAID_DR" "$LABEL_READ"
+reset_state; echo UNRAID > "$STATE"; BLKID_EMPTY=1; LSBLK_EMPTY=1; fatlabel() { return 1; }
+quiet confirm_label; assert_eq "unreadable by every method and no udev link: fails (no skipping)" "1" "$?"
+quiet label_report; assert_contains "failure report lists each method" "$OUT" "blkid:"; assert_contains "failure report shows the by-label link" "$OUT" "by-label"
+# last resort: /dev/disk/by-label/UNRAID must resolve to THIS partition
+mkdir -p "$UDEV_LABEL_DIR"; ln -s "$BACKUP_PART" "$UDEV_LABEL_DIR/UNRAID"
+quiet confirm_label; assert_eq "udev link points at our partition: accepted with a warning" "0" "$?"; assert_contains "udev fallback warns" "$OUT" "udev reports"
+rm -f "$UDEV_LABEL_DIR/UNRAID"; ln -s "$DEV/sdz1" "$UDEV_LABEL_DIR/UNRAID"; touch "$DEV/sdz1"
+quiet confirm_label; assert_eq "udev link points at ANOTHER drive: refused" "1" "$?"
+rm -f "$UDEV_LABEL_DIR/UNRAID"; ln -s "$DEV/does_not_exist" "$UDEV_LABEL_DIR/UNRAID"
+quiet confirm_label; assert_eq "dangling udev link: refused" "1" "$?"
+out=$( unset -f udevadm; mkdir -p "$UDEV_LABEL_DIR"; rm -f "$UDEV_LABEL_DIR/UNRAID"; ln -s "$BACKUP_PART" "$UDEV_LABEL_DIR/UNRAID"; PATH=/nonexistent; confirm_label >/dev/null 2>&1; echo $? )
+assert_eq "no udevadm: the udev fallback is skipped and it fails" "1" "$out"
+fatlabel() { fatlabel_plain2 "$@"; }
+eval "$(declare -f fatlabel_plain2 | sed 's/^fatlabel_plain2 ()/fatlabel ()/')"
+BLKID_EMPTY=""; LSBLK_EMPTY=""; rm -rf "$UDEV_LABEL_DIR"
 
 # ---------------- enable_uefi ----------------
 reset_state; make_backup_tree 447 EFI-; quiet enable_uefi

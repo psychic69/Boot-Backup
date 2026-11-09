@@ -135,6 +135,7 @@ Follow [the remote backup guide](dr_usb_backup.md#remote-backup--remote) steps 1
   - [ ] the prompt `Type RESTORE to continue`
 - [ ] **Cancel test first:** press Enter at the prompt. **Expect:** `Cancelled. Nothing was changed.` and the stick is still labeled `UNRAID_DR` (`fatlabel /dev/sdX1`).
 - [ ] **Run again and type `RESTORE`.** **Expect:** `Label is now 'UNRAID'`, `Renamed EFI- to EFI`, `Boot loader installed`, `MBR written and verified (447 bytes)`, `Verification passed` (note any warnings, especially about the active flag or the SYSLINUX boot sector), then `All done!` and the license reminder.
+- [ ] **Label check on real hardware (1.2.1, D-1.2.1-01):** during that run, verification must pass on the first read with no `Label not confirmed yet` lines, even though `fatlabel` may print `There are differences between boot sector and its backup`. Afterwards run `blkid -p -s LABEL -o value /dev/sdX1` and expect `UNRAID`. Note whether any retry lines appeared and how many seconds the label took.
 - [ ] **Boot the restored stick** on a UEFI machine. **Expect:** Unraid starts and (as expected) asks for a license key replacement. **Do not replace the key.**
 - [ ] (If you want legacy-BIOS support) boot it on a machine in legacy/CSM mode.
 - [ ] **Verification drill:** on a fresh `UNRAID_DR` stick, append a byte to `previous/memtest`, then run the restore. **Expect:** `1 file(s) on the backup FAILED verification`, then the prompt `Type OVERRIDE to restore anyway`; **Enter** cancels with nothing changed.

@@ -143,6 +143,13 @@ umount /mnt/ventoy
 - Verify backup USB is plugged in
 - Check label is exactly "UNRAID_DR"
 
+**"Verification failed: label is ..., expected 'UNRAID'" / "Label not confirmed yet"**
+- The script re-reads the label for about 30 seconds before giving up; progress lines are normal, not a hang
+- The message "There are differences between boot sector and its backup" is a harmless `fatlabel` warning after the boot loader
+  install and no longer causes a failure
+- If it still fails, the report shows what `blkid`, `lsblk`, `fatlabel` and `/dev/disk/by-label/UNRAID` returned. The drive is put
+  back to `UNRAID_DR` and it is safe to run the script again. Unraid will not boot unless the label is exactly `UNRAID`
+
 **"Ventoy partition mounted read-only"**
 - This shouldn't happen with `VTOY_LINUX_REMOUNT: "1"`
 - If it does, manually remount: `mount -o remount,rw /dev/sdX1 /mnt/sdX1`

@@ -2,8 +2,8 @@
   UNRAID BOOT BACKUP SUITE - COMPLETE FILE MANIFEST
 ═══════════════════════════════════════════════════════════════
 
-Generated: 2026-11-03
-Version: 1.2.0
+Generated: 2026-11-09
+Version: 1.2.1
 
 ───────────────────────────────────────────────────────────────
 SCRIPTS (Ready to Use)
@@ -218,6 +218,11 @@ Community:
 ───────────────────────────────────────────────────────────────
 VERSION HISTORY
 ───────────────────────────────────────────────────────────────
+
+1.2.1 - 2026-11-09
+  - move_dr_to_unraid.sh: the UNRAID label is read with blkid -p (fallbacks lsblk, fatlabel last line), flushed first,
+    retried for ~30s, with a /dev/disk/by-label check before rollback; fixes a false "Verification failed" caused by
+    fatlabel's boot-sector warning (D-1.2.1-01)
 
 1.2.0 - 2026-11-03
   - setup_ventoy_usb.sh now reads its version from the release VERSION file at the repo root
