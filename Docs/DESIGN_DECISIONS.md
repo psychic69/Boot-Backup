@@ -441,3 +441,11 @@ Not built, not decided; listed so they are not lost. Each needs the owner's go-a
 - **Alternatives rejected:** *Resume any UNRAID USB* - could rewrite the boot loader of a healthy flash drive; *require a flag*
   - a stressed user in an emergency will not know it.
 - **Note:** a fully finished restore also carries the marker, so rerunning on it is allowed and harmless (steps are idempotent).
+
+#### Hardware results (2026-11-11)
+- A full restore with the 1.2.1 script produced a stick that **booted Unraid on an Acer Aspire laptop with no issues**, so the
+  EFI rename, syslinux install and MBR write (steps 4-5) are confirmed on real hardware. The earlier failed run was the stick
+  dropping off the system after `fatlabel`, not a flaw in those steps; the identical rerun passed (see D-1.2.2-01).
+- **Secure Boot must be off to boot a restored stick.** Unraid's UEFI loader is not signed. On Acer laptops the option is greyed out
+  until a BIOS supervisor password is set (Security tab), then Boot tab -> Secure Boot -> Disabled. Not a script issue.
+- Still unverified on hardware: the 1.2.2 wait/re-find and resume paths (stub tests only), and the 1.2.1 first-read label pass.
