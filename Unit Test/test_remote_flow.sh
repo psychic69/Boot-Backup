@@ -14,9 +14,9 @@ log_message() { echo "$1"; }
 CALLS="$TMP_DIR/calls"
 flock()      { return 0; }
 mountpoint() { return 0; }
-ssh() {   # the "run a command" restriction check is: ssh <opts> target true
+ssh() {   # the "run a command" restriction check is: ssh <opts> target id
     echo "ssh $*" >> "$CALLS"
-    case "${*: -1}" in true) return "${SSH_TRUE_RC:-1}" ;; esac
+    case "${*: -1}" in id) return "${SSH_TRUE_RC:-1}" ;; esac
     return 0
 }
 rsync() {
@@ -52,15 +52,15 @@ setup; run
 assert_eq "healthy run succeeds" "0" "$RC"
 assert_contains "destination checked" "$OUT" "Destination OK: writable, and the key is restricted to rrsync."
 assert_contains "mirror finished" "$OUT" "Remote mirror completed successfully"
-probe_n=$(calls | grep -n '\.dr_usb_probe' | head -1 | cut -d: -f1); ssh_n=$(calls | grep -n ' true$' | head -1 | cut -d: -f1); mirror_n=$(calls | grep -n -- '--delete-after' | head -1 | cut -d: -f1)
+probe_n=$(calls | grep -n '\.dr_usb_probe' | head -1 | cut -d: -f1); ssh_n=$(calls | grep -n ' id$' | head -1 | cut -d: -f1); mirror_n=$(calls | grep -n -- '--delete-after' | head -1 | cut -d: -f1)
 [ -n "$probe_n" ] && [ -n "$ssh_n" ] && [ -n "$mirror_n" ] && [ "$probe_n" -lt "$ssh_n" ] && [ "$ssh_n" -lt "$mirror_n" ] && pass "order: probe, then restriction check, then mirror" || fail "order: probe, restriction check, mirror" "$(calls)"
 mirror=$(calls | grep -- '--delete-after')
 assert_contains "mirror source is the boot folder" "$mirror" "$TMP_DIR/boot/ "
 assert_contains "mirror destination is the rrsync root" "$mirror" "unraidbackup@backup.lan:./"
 assert_not_contains "mirror is not a dry run" "$mirror" "--dry-run"
 assert_contains "probe goes to the rrsync root" "$(calls | grep '\.dr_usb_probe')" "unraidbackup@backup.lan:./"
-assert_contains "ssh uses a pinned known_hosts" "$(calls | grep ' true$')" "StrictHostKeyChecking=yes"
-assert_contains "ssh is non-interactive" "$(calls | grep ' true$')" "BatchMode=yes"
+assert_contains "ssh uses a pinned known_hosts" "$(calls | grep ' id$')" "StrictHostKeyChecking=yes"
+assert_contains "ssh is non-interactive" "$(calls | grep ' id$')" "BatchMode=yes"
 [ -z "$(ls /tmp/dr_usb_probe.* 2>/dev/null)" ] && pass "probe temp folder removed" || fail "probe temp folder removed"
 [ -z "$SSH_KEY_TMP" ] && pass "private key copy removed" || fail "private key copy removed"
 

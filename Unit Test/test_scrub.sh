@@ -19,7 +19,7 @@ mount()      { echo "mount $*" >> "$CALLS"; return "${MOUNT_RC:-0}"; }
 umount()     { echo "umount $*" >> "$CALLS"; return 0; }
 flock()      { return 0; }
 notify_failure() { echo "notify: $1" >> "$CALLS"; }
-ssh()   { echo "ssh $*" >> "$CALLS"; case "${*: -1}" in true) return "${SSH_TRUE_RC:-1}" ;; esac; return 0; }
+ssh()   { echo "ssh $*" >> "$CALLS"; case "${*: -1}" in id) return "${SSH_TRUE_RC:-1}" ;; esac; return 0; }
 rsync() {
     echo "rsync $*" >> "$CALLS"
     case "$*" in

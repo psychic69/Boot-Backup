@@ -29,6 +29,7 @@ rejected, and what we learned about Unraid along the way. It is deliberately sep
   - [Open and parked ideas](#open-and-parked-ideas)
 - [Version 1.2.1](#version-121)
 - [Version 1.2.2](#version-122)
+- [Version 1.2.3](#version-123)
 
 ---
 
@@ -449,3 +450,24 @@ Not built, not decided; listed so they are not lost. Each needs the owner's go-a
 - **Secure Boot must be off to boot a restored stick.** Unraid's UEFI loader is not signed. On Acer laptops the option is greyed out
   until a BIOS supervisor password is set (Security tab), then Boot tab -> Secure Boot -> Disabled. Not a script issue.
 - Still unverified on hardware: the 1.2.2 wait/re-find and resume paths (stub tests only), and the 1.2.1 first-read label pass.
+
+---
+
+## Version 1.2.3
+
+*Patch release: first real-hardware run of `-remote`.*
+
+### C. The remote backup and its security
+
+#### D-1.2.3-01 — The "key is restricted" probe runs `id`, not `true`
+- **Decision:** `remote_prepare` proves the key cannot run arbitrary commands by running `ssh ... id` against the destination. Exit 0
+  means the command ran, so the key is unrestricted and the run is refused. Any non-zero exit (rrsync rejects it) passes.
+- **Why:** the first real `-remote` run was refused with `SECURITY CHECK FAILED` although `authorized_keys` was correct
+  (`restrict,from=...,command="rrsync -wo <dir>"`). Run by hand against rsync/rrsync 3.4.1: `ssh ... true` -> exit 0 with no output
+  (rrsync accepts it as a no-op); `ssh ... id` -> `rrsync error: SSH_ORIGINAL_COMMAND does not run rsync`, exit 1. So the old
+  probe could not tell a locked key from an open one. `id` is harmless, read-only, and cannot be a real rsync invocation.
+- **Alternatives rejected:** *Parse rrsync's message* - wording differs between versions; the exit code is the contract.
+  *Drop the check* - it is the only automatic proof that a stolen Unraid key cannot get a shell on the destination.
+  *Keep `true` and also run `id`* - the `true` probe adds nothing.
+- **Residual:** if some future rrsync also accepted `id`, the check would pass wrongly; the unit test only stubs ssh, so the real
+  behavior is covered by the by-hand result above (rrsync 3.4.1), not by the test suite.

@@ -2,6 +2,16 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
+## [1.2.3] - 2026-11-11
+
+### Fixed
+- **`-remote`: a correctly restricted key was refused with "SECURITY CHECK FAILED ... can run arbitrary commands".** Found on real
+  hardware (rsync/rrsync 3.4.1 on the destination). The check ran `ssh ... true` and treated exit 0 as "unrestricted", but
+  rrsync accepts a bare `true` and exits 0, while it rejects any real command (`rrsync error: SSH_ORIGINAL_COMMAND does not run
+  rsync`, exit 1). The probe now runs `id`. An unrestricted key still runs `id` and is still refused. See D-1.2.3-01
+  - `Docs/dr_usb_backup.md` manual SSH test updated to use `id`, with a note on why not `true`
+- Existing installs: replace the scripts (`lib/remote.sh` is the changed file); recovery USBs are unaffected
+
 ## [1.2.2] - 2026-11-11
 
 ### Fixed

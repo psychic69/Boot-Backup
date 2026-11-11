@@ -3,7 +3,7 @@
 ═══════════════════════════════════════════════════════════════
 
 Generated: 2026-11-09
-Version: 1.2.2
+Version: 1.2.3
 
 ───────────────────────────────────────────────────────────────
 SCRIPTS (Ready to Use)
@@ -218,6 +218,10 @@ Community:
 ───────────────────────────────────────────────────────────────
 VERSION HISTORY
 ───────────────────────────────────────────────────────────────
+
+1.2.3 - 2026-11-11
+  - lib/remote.sh: the -remote restriction check runs `id` instead of `true` (rrsync 3.4.1 accepts a bare `true`, which made
+    a correctly restricted key look unrestricted) (D-1.2.3-01)
 
 1.2.2 - 2026-11-11
   - move_dr_to_unraid.sh: waits for a USB stick that drops off mid-restore and finds it again by filesystem UUID

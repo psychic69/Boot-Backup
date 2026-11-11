@@ -114,7 +114,9 @@ stage_ssh_key() {
 # Needs load_remote_config to have run. Sets REMOTE_TARGET and REMOTE_SSH_OPTS.
 # The destination key must be locked to rrsync (rsync only, one folder). Two checks:
 #  1. a tiny rsync push works (connection, key, known_hosts, rrsync, and the folder exist and are writable)
-#  2. the same key can NOT run an arbitrary command - if it can, refuse to run (see Docs/dr_usb_backup.md)
+#  2. the same key can NOT run an arbitrary command - if it can, refuse to run (see Docs/dr_usb_backup.md).
+#     The probe command is `id`, which rrsync rejects. NOT `true`: rrsync 3.4.1 accepts a bare `true` and exits 0, which
+#     made a correctly restricted key look unrestricted (found on real hardware, D-1.2.3-01).
 remote_prepare() {
     stage_ssh_key || return 1
 
@@ -143,7 +145,7 @@ remote_prepare() {
         log_message "ERROR: and that the folder named in that line exists and is writable by '$REMOTE_USER'."
         return 1
     fi
-    out=$(ssh "${REMOTE_SSH_OPTS[@]}" "$REMOTE_TARGET" true 2>&1)
+    out=$(ssh "${REMOTE_SSH_OPTS[@]}" "$REMOTE_TARGET" id 2>&1)
     if [ $? -eq 0 ]; then
         log_message "ERROR: SECURITY CHECK FAILED: the key for $REMOTE_TARGET can run arbitrary commands on the destination."
         log_message "ERROR: Refusing to run. Restrict the key in authorized_keys on the server, for example:"

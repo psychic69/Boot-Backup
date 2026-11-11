@@ -328,11 +328,12 @@ The log says `Mode: REMOTE` and ends with either `script completed.` or
 | `Remote mirror FAILED (rsync exit code N)` | See the `rsync:` lines just above it in the log. An `rrsync` that rejects an option shows up here. |
 
 To test SSH by hand, copy the key to RAM first (ssh rejects keys on the FAT drive). A restricted key will
-refuse the command, which is the correct result:
+refuse the command (`rrsync error: SSH_ORIGINAL_COMMAND does not run rsync`), which is the correct result. Use `id`, not `true`:
+rrsync accepts a bare `true` and exits 0, so it proves nothing:
 
 ```bash
 cp /boot/config/plugins/dr_usb/id_ed25519 /dev/shm/k && chmod 600 /dev/shm/k
-ssh -i /dev/shm/k -o UserKnownHostsFile=/boot/config/plugins/dr_usb/known_hosts unraidbackup@backup.lan true
+ssh -i /dev/shm/k -o UserKnownHostsFile=/boot/config/plugins/dr_usb/known_hosts unraidbackup@backup.lan id
 rm -f /dev/shm/k
 ```
 
