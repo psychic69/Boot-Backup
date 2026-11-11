@@ -175,11 +175,11 @@ echo "0 3 * * * bash /boot/config/plugins/dr_usb/dr_usb_backup.sh" >> /boot/conf
 
 ## Documentation
 
-Detailed documentation for each script is available in the `docs/` folder:
+Detailed documentation for each script is available in the `Docs/` folder:
 
-- **[dr_usb_create.md](docs/dr_usb_create.md)** - Complete guide for the interactive setup script
-- **[dr_usb_backup.md](docs/dr_usb_backup.md)** - Complete guide for the automated backup script  
-- **[VENTOY_README.md](docs/VENTOY_README.md)** - Complete guide for creating the recovery USB
+- **[dr_usb_create.md](Docs/dr_usb_create.md)** - Complete guide for the interactive setup script
+- **[dr_usb_backup.md](Docs/dr_usb_backup.md)** - Complete guide for the automated backup script  
+- **[VENTOY_README.md](Docs/VENTOY_README.md)** - Complete guide for creating the recovery USB
 
 These documents include:
 - Detailed feature explanations
@@ -193,7 +193,7 @@ These documents include:
 | Script | Purpose | Frequency | Risk Level | Description |
 |--------|---------|-----------|------------|-------------|
 | `dr_usb_create.sh` | **Create backup USB** | One-time | ⚠️ High (formats USB) | Initial setup - formats and creates backup USB |
-| `dr_usb_backup.sh` | **Update backup** | Daily/Weekly | ✅ Low (rsync only) | Incremental backups - safe for automation. `-remote` mirrors to another server instead ([guide](docs/dr_usb_backup.md#remote-backup--remote)) |
+| `dr_usb_backup.sh` | **Update backup** | Daily/Weekly | ✅ Low (rsync only) | Incremental backups - safe for automation. `-remote` mirrors to another server instead ([guide](Docs/dr_usb_backup.md#remote-backup--remote)) |
 | `dr_usb_scrub.sh` | **Check for damage** | Weekly/Monthly | ✅ None (read-only) | Verifies the live `/boot` and (`-backup`) the backup against their hashes; loud report on any problem |
 | `setup_ventoy_usb.sh` | **Create recovery USB** | One-time, then re-run to upgrade (automatic; `-upgrade` is deprecated) | ⚠️ Medium (downloads ISO, installs Ventoy if needed) | Sets up emergency recovery environment with automatic Ventoy bootstrap |
 | `move_dr_to_unraid.sh` | **Emergency restore** | As needed | ⚠️ High (changes labels) | Restores UNRAID_DR → UNRAID during recovery |
@@ -248,7 +248,7 @@ These documents include:
 - Renames `EFI` directory to `EFI-` to prevent accidental boot from backup
 - Reports backup statistics (files transferred, size, duration)
 
-**Remote mode (`-remote`):** instead of the local `UNRAID_DR` USB, run `dr_usb_backup.sh -remote` to mirror `/boot` 1:1 to another server over SSH (rsync). Settings live in `remote.ini` (template: [`remote.ini.example`](remote.ini.example)), which goes in `/boot/config/plugins/dr_usb/` along with an SSH key and a pinned `known_hosts`. **The destination must lock the key to `rrsync` (write-only, one folder, no shell)**; the script refuses to run otherwise. Without `-remote`, nothing changes. **Full setup, a `remote.ini` variable reference and troubleshooting:** [docs/dr_usb_backup.md → Remote Backup](docs/dr_usb_backup.md#remote-backup--remote)
+**Remote mode (`-remote`):** instead of the local `UNRAID_DR` USB, run `dr_usb_backup.sh -remote` to mirror `/boot` 1:1 to another server over SSH (rsync). Settings live in `remote.ini` (template: [`remote.ini.example`](remote.ini.example)), which goes in `/boot/config/plugins/dr_usb/` along with an SSH key and a pinned `known_hosts`. **The destination must lock the key to `rrsync` (write-only, one folder, no shell)**; the script refuses to run otherwise. Without `-remote`, nothing changes. **Full setup, a `remote.ini` variable reference and troubleshooting:** [Docs/dr_usb_backup.md → Remote Backup](Docs/dr_usb_backup.md#remote-backup--remote)
 
 **When to run:** 
 - Daily/weekly via User Scripts scheduler (recommended)
