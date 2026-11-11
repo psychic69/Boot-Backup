@@ -3,7 +3,7 @@
 ═══════════════════════════════════════════════════════════════
 
 Generated: 2026-11-09
-Version: 1.2.1
+Version: 1.2.2
 
 ───────────────────────────────────────────────────────────────
 SCRIPTS (Ready to Use)
@@ -218,6 +218,10 @@ Community:
 ───────────────────────────────────────────────────────────────
 VERSION HISTORY
 ───────────────────────────────────────────────────────────────
+
+1.2.2 - 2026-11-11
+  - move_dr_to_unraid.sh: waits for a USB stick that drops off mid-restore and finds it again by filesystem UUID
+    (D-1.2.2-01); a USB stick already labelled UNRAID that still has its BACKUP-* marker is resumed (D-1.2.2-02)
 
 1.2.1 - 2026-11-09
   - move_dr_to_unraid.sh: the UNRAID label is read with blkid -p (fallbacks lsblk, fatlabel last line), flushed first,

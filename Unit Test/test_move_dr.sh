@@ -39,12 +39,15 @@ blockdev()   { :; }
 udevadm()    { :; }
 sleep()      { :; }
 LABEL_RETRY_DELAYS=(0 0 0 0)
+DEVICE_WAIT_SECONDS=2
 UDEV_LABEL_DIR="$TMP_DIR/by-label"
 lsblk() {
     case "$*" in
         *"-no LABEL"*) [ -n "${LSBLK_EMPTY:-}" ] || cat "$STATE" ;;
         *"-P -b -o NAME,MOUNTPOINT,UUID,FSTYPE,LABEL,SIZE"*) printf '%b' "${LSBLK_FULL:-}" ;;
         *"-P -o NAME,LABEL"*)                                  printf '%b' "${LSBLK_LABELS:-}" ;;
+        *"-P -o NAME,UUID"*)                                   printf '%b' "${LSBLK_UUIDS:-}" ;;
+        *"-no UUID"*) echo "${FAKE_UUID:-}" ;;
         *PKNAME*)  local p="${*: -1}"; echo "${p%[0-9]}" ;;
         *"-o TRAN"*) local d="${*: -1}"; eval "echo \${TRAN_$(basename "$d"):-}" ;;
         *"-o MODEL"*) echo "Fake USB Stick" ;;
@@ -81,6 +84,7 @@ make_devices() {       # disk image (4 KB, sentinel at byte 600) and a partition
 reset_state() {
     VERIFY_PROBLEMS=(); VERIFY_NOTES=(); NO_MANIFEST=""
     BACKUP_PART="$DEV/sdc1"; BACKUP_DISK="$DEV/sdc"; MOUNT_POINT="$MP"; WORK_DIR=""
+    BACKUP_UUID=""; RESUME=false; FAKE_UUID=""; LSBLK_UUIDS=""
     BACKUP_MARKER=""; EFI_STATE=""; RELABELED=false; EFI_RENAMED=false
     FATLABEL_FAIL=""; FATLABEL_IGNORE=""; BLKID_EMPTY=""; LSBLK_EMPTY=""; echo 0 > "$TMP_DIR/blkid_fails"; rm -rf "$UDEV_LABEL_DIR"; UMOUNT_RC=0; MOUNT_RC=0; FINDMNT_OUT=""; FINDMNT_ONCE=""
     SYSLINUX_RC=0; SYSLINUX_VERSION_RC=0; SYSLINUX_LOG="$TMP_DIR/syslinux.log"; : > "$SYSLINUX_LOG"; rm -f "$TMP_DIR/findmnt_done"
@@ -277,6 +281,41 @@ VERIFY_PROBLEMS=(); for i in $(seq 1 25); do VERIFY_PROBLEMS+=("file$i: does not
 assert_contains "summary shows the problem count" "$OUT" "25 file(s) on the backup FAILED verification"
 assert_contains "summary caps the list" "$OUT" "and 5 more"
 VERIFY_PROBLEMS=(); VERIFY_NOTES=("a note"); quiet show_summary; assert_contains "summary shows the all-clear" "$OUT" "All checked files match"; assert_contains "summary shows notes" "$OUT" "a note"
+
+# ---------------- ensure_backup_part (the stick vanished and came back) ----------------
+reset_state; quiet ensure_backup_part; assert_eq "present device: nothing to do" "0" "$?"
+reset_state; BACKUP_PART="$DEV/gone1"; quiet ensure_backup_part; assert_eq "device never returns: fails" "1" "$?"; assert_contains "…and says to replug and rerun" "$OUT" "run this script again"
+reset_state; BACKUP_PART="$DEV/gone1"; BACKUP_DISK="$DEV/gone"; BACKUP_UUID="AAAA-1111"
+LSBLK_UUIDS="NAME=\"$DEV/sdc1\" UUID=\"AAAA-1111\"\n"
+quiet ensure_backup_part; assert_eq "re-attached under another name: found by UUID" "0" "$?"
+assert_eq "…BACKUP_PART updated" "$DEV/sdc1" "$BACKUP_PART"; assert_eq "…BACKUP_DISK updated" "$DEV/sdc" "$BACKUP_DISK"
+reset_state; BACKUP_PART="$DEV/gone1"; BACKUP_UUID="AAAA-1111"; LSBLK_UUIDS="NAME=\"$DEV/sdc1\" UUID=\"BBBB-2222\"\n"
+quiet ensure_backup_part; assert_eq "a different drive's UUID is not accepted" "1" "$?"
+reset_state; BACKUP_PART="$DEV/gone1"; quiet relabel_backup; assert_eq "relabel on a vanished stick fails cleanly" "1" "$?"; assert_eq "…and does not change any label" "UNRAID_DR" "$(cat "$STATE")"
+reset_state; BACKUP_PART="$DEV/gone1"; RELABELED=true; quiet rollback; assert_contains "rollback on a vanished stick explains how to resume" "$OUT" "resumes an"
+
+# ---------------- resuming an unfinished restore ----------------
+resume_setup() {   # a USB partition already labelled UNRAID that still carries its BACKUP-* marker
+    reset_state; make_backup_tree 447 EFI-; TRAN_sdc=usb
+    LSBLK_FULL="NAME=\"$DEV/sdc1\" MOUNTPOINT=\"\" UUID=\"u\" FSTYPE=\"vfat\" LABEL=\"UNRAID\" SIZE=\"16007561216\"\n"
+    FINDMNT_OUT="$MP\n"; echo UNRAID > "$STATE"
+}
+resume_setup; quiet check_no_unraid_drive; assert_eq "UNRAID + BACKUP marker on USB: resumed, not refused" "0" "$?"; assert_eq "…RESUME set" "true" "$RESUME"
+resume_setup; rm -f "$MP"/BACKUP-*; quiet check_no_unraid_drive; assert_eq "UNRAID without a BACKUP marker (a real Unraid flash): refused" "1" "$?"; assert_eq "…RESUME not set" "false" "$RESUME"
+resume_setup; TRAN_sdc=sata; quiet check_no_unraid_drive; assert_eq "UNRAID with a marker but not on USB: refused" "1" "$?"; TRAN_sdc=usb
+resume_setup; LSBLK_FULL="NAME=\"$DEV/sdc1\" MOUNTPOINT=\"\" UUID=\"u\" FSTYPE=\"vfat\" LABEL=\"UNRAID\" SIZE=1\nNAME=\"/dev/sdb1\" MOUNTPOINT=\"\" UUID=\"v\" FSTYPE=\"vfat\" LABEL=\"UNRAID\" SIZE=1\n"
+quiet check_no_unraid_drive; assert_eq "a real UNRAID drive next to the half-restored stick: still refused" "1" "$?"
+resume_setup; LSBLK_LABELS="NAME=\"$DEV/sdc1\" LABEL=\"UNRAID\"\n"; RESUME=true; BACKUP_PART=""; BACKUP_DISK=""
+quiet find_backup_usb; assert_eq "resume: the UNRAID stick is found" "0" "$?"; assert_eq "…as the backup partition" "$DEV/sdc1" "$BACKUP_PART"
+resume_setup; RESUME=true; quiet relabel_backup; assert_eq "resume: relabel step only checks the label" "0" "$?"; assert_eq "…RELABELED stays false (rollback must not flip it back)" "false" "$RELABELED"
+
+flow_resume() { resume_setup; FINDMNT_OUT="$MP\n"; FINDMNT_ONCE=1; LSBLK_LABELS="NAME=\"$DEV/sdc1\" LABEL=\"UNRAID\"\n"; BACKUP_PART=""; BACKUP_DISK=""; }
+flow_resume
+OUT=$(main <<< "RESTORE" 2>&1); rc=$?
+assert_eq "RESUME flow: exit 0" "0" "$rc"; assert_contains "RESUME flow: says it is resuming" "$OUT" "will be resumed"; assert_contains "RESUME flow: final message" "$OUT" "All done!"
+[ -d "$MP/EFI" ] && [ ! -d "$MP/EFI-" ] && pass "RESUME flow: UEFI enabled" || fail "RESUME flow: UEFI enabled"
+assert_eq "RESUME flow: label still UNRAID" "UNRAID" "$(cat "$STATE")"
+cleanup
 
 # ---------------- main: whole flows ----------------
 flow_setup() {

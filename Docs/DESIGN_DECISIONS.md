@@ -28,6 +28,7 @@ rejected, and what we learned about Unraid along the way. It is deliberately sep
   - [Facts about Unraid that the design relies on](#facts-about-unraid-that-the-design-relies-on)
   - [Open and parked ideas](#open-and-parked-ideas)
 - [Version 1.2.1](#version-121)
+- [Version 1.2.2](#version-122)
 
 ---
 
@@ -402,3 +403,41 @@ Not built, not decided; listed so they are not lost. Each needs the owner's go-a
   - *Dropping page caches* (as the scrub fix did) - not the cause here: the data read was current; the output was polluted.
 - **Not verified on hardware yet:** the 30s backoff and the udev last resort are covered by stubbed tests only; the next real
   restore trial (spare stick) should confirm `blkid -p` reads `UNRAID` straight after the syslinux install.
+
+---
+
+## Version 1.2.2
+
+*Patch release: second real-hardware run of the restore.* Bumped so `setup_ventoy_usb.sh` offers the upgrade.
+
+### D. Restore (move_dr_to_unraid.sh)
+
+#### D-1.2.2-01 — A stick that vanishes mid-restore is waited for and found again by filesystem UUID
+- **Decision:** `find_backup_usb` records the partition's filesystem UUID (`BACKUP_UUID`). `ensure_backup_part` runs before the
+  relabel, in `confirm_label` (every read), `mount_backup`, `install_bootloader`, `write_mbr` and `rollback`. If the device node is
+  missing it waits up to `DEVICE_WAIT_SECONDS` (30), looking each second for a first partition with the same UUID, and updates
+  `BACKUP_PART` / `BACKUP_DISK` if it came back under another name. If it never returns it fails with "replug, run mountall, run
+  again". Rollback skips its label/EFI undo when the stick is absent instead of failing on a missing node.
+- **Why:** on a real run `fatlabel` worked, then the stick disappeared (`open: No such file or directory`, every label reader empty,
+  not visible to `mountall` until replugged). The rerun with nothing changed succeeded, so it is an intermittent USB/udev event,
+  not logic. The old flow then failed verification, could not roll back, and left a stick labelled `UNRAID` with no boot loader.
+- **Why UUID:** the FAT volume ID does not change on relabel, needs no extra tools and is unique per stick. USB serial would need
+  `udevadm`, which is optional here.
+- **Alternatives rejected:** *Retry the whole restore automatically* - repeating destructive steps on a changing device name;
+  *just lengthen the label retries* - they read a path that no longer exists; *disabling USB autosuspend or resetting the port* -
+  not proven to be the cause and riskier on an emergency system.
+- **Not verified on hardware:** the cause of the drop is unconfirmed (no `dmesg` was captured). Covered by stubbed tests only.
+  If it recurs, capture `dmesg | tail -40` before replugging.
+
+#### D-1.2.2-02 — An `UNRAID` USB with a `BACKUP-*` marker is an unfinished restore and is resumed
+- **Decision:** `check_no_unraid_drive` no longer refuses every `UNRAID` partition. One that is on USB, is the first partition and
+  still has a `BACKUP-*` file in its root (`is_unfinished_restore`, read-only mount) sets `RESUME=true`. Then `find_backup_usb`
+  looks for `UNRAID` instead of `UNRAID_DR`, the summary says the label is already set, `relabel_backup` only verifies the label
+  and leaves `RELABELED=false` so rollback never renames it back. Any other `UNRAID` drive, or more than one candidate, is still
+  refused.
+- **Why:** after the drop in D-1.2.2-01 the stick was `UNRAID` with `EFI-` not renamed and no boot loader; the script refused to
+  run and the user had to relabel by hand. The marker is written only to backup sticks by `dr_usb_backup.sh`, so it separates a
+  half-restored stick from a working Unraid flash drive.
+- **Alternatives rejected:** *Resume any UNRAID USB* - could rewrite the boot loader of a healthy flash drive; *require a flag*
+  - a stressed user in an emergency will not know it.
+- **Note:** a fully finished restore also carries the marker, so rerunning on it is allowed and harmless (steps are idempotent).

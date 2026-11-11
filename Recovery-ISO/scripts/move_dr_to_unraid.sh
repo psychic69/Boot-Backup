@@ -18,6 +18,9 @@
 #   6. verifies the result
 # If step 3-6 fail, the label and EFI folder are put back so the USB is exactly a backup
 # again and you can retry. The point of no return is rebooting with this USB.
+# If the USB drops off the system part-way (seen on real hardware), the script waits for it to come back and finds it
+# again by its filesystem UUID. If it never returns, replug it and run the script again: a stick that is already labelled
+# UNRAID but still carries its BACKUP-* marker is treated as an unfinished restore and is resumed.
 #
 # NOTE: this script is copied by itself onto the Ventoy recovery USB, so it cannot use lib/.
 # NOTE: We do NOT use 'set -e' because several commands are expected to return non-zero
@@ -37,11 +40,14 @@ MAX_PROBLEMS_SHOWN=20
 # Unraid will not boot unless the flash drive is labelled exactly UNRAID, so the label is confirmed with retries.
 # Seconds to wait before each retry if the first read does not show the label (2+4+8+16 = 30s in total).
 LABEL_RETRY_DELAYS=(2 4 8 16)
+DEVICE_WAIT_SECONDS=30                # how long to wait for a USB stick that vanished to reappear
 UDEV_LABEL_DIR="/dev/disk/by-label"   # udev's label symlinks (a variable so the tests can point it elsewhere)
 
 # --- State shared between steps ---
 BACKUP_PART=""        # e.g. /dev/sdc1
 BACKUP_DISK=""        # e.g. /dev/sdc
+BACKUP_UUID=""        # filesystem UUID of the partition (it survives a relabel, so the stick can be found again if it re-attaches as another sdX)
+RESUME=false          # true when the stick is already labelled UNRAID but the restore never finished
 MOUNT_POINT=""
 WORK_DIR=""
 BACKUP_MARKER=""
@@ -102,19 +108,62 @@ require_environment() {
     return 0
 }
 
+# --- True when a partition labelled UNRAID is really an unfinished restore, not a working Unraid flash drive:
+# a USB drive, first partition, that still has the BACKUP-* marker file only a backup stick carries ---
+is_unfinished_restore() {
+    local part="$1" parent tran dir tmp="" found=1
+    parent=$(lsblk -p -n -o PKNAME "$part" 2>/dev/null | head -n 1)
+    [ -n "$parent" ] || return 1
+    tran=$(lsblk -n -d -o TRAN "$parent" 2>/dev/null | head -n 1 | tr -d ' ')
+    [ "$tran" = "usb" ] || return 1
+    [ "$part" = "${parent}1" ] || return 1
+    dir=$(findmnt -rn -S "$part" -o TARGET 2>/dev/null | head -n 1)
+    if [ -z "$dir" ]; then
+        tmp=$(mktemp -d /mnt/unraid_check.XXXXXX) || return 1
+        if ! mount -o ro "$part" "$tmp" 2>/dev/null; then
+            rmdir "$tmp" 2>/dev/null
+            return 1
+        fi
+        dir="$tmp"
+    fi
+    [ -n "$(find "$dir" -maxdepth 1 -type f -name 'BACKUP-*' 2>/dev/null | head -n 1)" ] && found=0
+    if [ -n "$tmp" ]; then
+        umount "$tmp" 2>/dev/null
+        rmdir "$tmp" 2>/dev/null
+    fi
+    return $found
+}
+
 # --- 1a. Refuse to run if a drive labelled UNRAID already exists ---
 check_no_unraid_drive() {
     echo "Checking for existing '$FINAL_LABEL' drive..."
-    local line label found=""
+    local line label found="" cand
+    local -a resumable=()
     while IFS= read -r line; do
         [ -n "$line" ] || continue
         label=$(get_column_value "$line" "LABEL")
-        if [ "$label" = "$FINAL_LABEL" ]; then
-            found="$line"
-            break
+        [ "$label" = "$FINAL_LABEL" ] || continue
+        cand=$(get_column_value "$line" "NAME")
+        if is_unfinished_restore "$cand"; then
+            resumable+=("$cand")
+            continue
         fi
+        found="$line"
+        break
     done < <(lsblk -p -n -P -b -o NAME,MOUNTPOINT,UUID,FSTYPE,LABEL,SIZE 2>/dev/null)
 
+    if [ -z "$found" ] && [ ${#resumable[@]} -gt 1 ]; then
+        err "More than one USB drive labelled '$FINAL_LABEL' looks like an unfinished restore: ${resumable[*]}"
+        echo "   Please leave only one of them plugged in and try again." >&2
+        return 1
+    fi
+    if [ -z "$found" ] && [ ${#resumable[@]} -eq 1 ]; then
+        RESUME=true
+        echo "↪️  ${resumable[0]} is already labelled '$FINAL_LABEL' but still carries its backup marker:"
+        echo "   an earlier restore did not finish. It will be resumed from where it stopped."
+        echo "---"
+        return 0
+    fi
     if [ -z "$found" ]; then
         echo "No conflicting '$FINAL_LABEL' drive found. Proceeding..."
         echo "---"
@@ -154,13 +203,15 @@ check_no_unraid_drive() {
 
 # --- 1b. Find ONE and ONLY ONE USB drive labelled UNRAID_DR, on its first partition ---
 find_backup_usb() {
-    echo "Searching for a *single* USB drive with label '$BACKUP_LABEL'..."
+    local want="$BACKUP_LABEL"
+    [ "$RESUME" = true ] && want="$FINAL_LABEL"
+    echo "Searching for a *single* USB drive with label '$want'..."
     local -a usb_parts=() usb_disks=() other_parts=()
     local line label name parent tran
     while IFS= read -r line; do
         [ -n "$line" ] || continue
         label=$(get_column_value "$line" "LABEL")
-        [ "$label" = "$BACKUP_LABEL" ] || continue
+        [ "$label" = "$want" ] || continue
         name=$(get_column_value "$line" "NAME")
         parent=$(lsblk -p -n -o PKNAME "$name" 2>/dev/null | head -n 1)
         tran=""
@@ -174,19 +225,19 @@ find_backup_usb() {
     done < <(lsblk -p -n -P -o NAME,LABEL 2>/dev/null)
 
     if [ ${#usb_parts[@]} -eq 0 ] && [ ${#other_parts[@]} -eq 0 ]; then
-        err "No drive with the label '$BACKUP_LABEL' was found."
+        err "No drive with the label '$want' was found."
         echo "   Please plug in the correct backup USB drive and try again." >&2
         return 1
     fi
     if [ ${#usb_parts[@]} -eq 0 ]; then
-        err "No *USB* drive with the label '$BACKUP_LABEL' was found."
+        err "No *USB* drive with the label '$want' was found."
         echo "   Found partition(s) with that label, but they are not on USB drives:" >&2
         printf '   - %s\n' "${other_parts[@]}" >&2
         echo "   Please plug in the correct backup USB drive and try again." >&2
         return 1
     fi
     if [ ${#usb_parts[@]} -gt 1 ]; then
-        err "Found *multiple* USB drives with the label '$BACKUP_LABEL'."
+        err "Found *multiple* USB drives with the label '$want'."
         echo "   This is ambiguous. Please remove the extra drive(s) and leave only the one you wish to use." >&2
         local i
         for i in "${!usb_parts[@]}"; do
@@ -199,14 +250,45 @@ find_backup_usb() {
     BACKUP_DISK="${usb_disks[0]}"
     # Unraid (and its boot-loader tools) require the flash drive on the FIRST partition
     if [ "$BACKUP_PART" != "${BACKUP_DISK}1" ]; then
-        err "'$BACKUP_LABEL' is on $BACKUP_PART, not the first partition of $BACKUP_DISK."
+        err "'$want' is on $BACKUP_PART, not the first partition of $BACKUP_DISK."
         echo "   Unraid must boot from the first partition. This drive cannot be restored with this script." >&2
         return 1
     fi
+    BACKUP_UUID=$(lsblk -no UUID "$BACKUP_PART" 2>/dev/null | head -n 1 | tr -d ' ')
     echo "✅ Found one and only one matching USB drive."
     echo "   Partition: $BACKUP_PART"
     echo "   Device:    $BACKUP_DISK"
     return 0
+}
+
+# --- If the stick dropped off the system (USB reset or re-attach), wait for it and find it again by its filesystem UUID.
+# Updates BACKUP_PART / BACKUP_DISK if it came back under another name. Returns 1 if it never returned. ---
+ensure_backup_part() {
+    [ -e "$BACKUP_PART" ] && return 0
+    echo "   ⚠️  $BACKUP_PART has disappeared (the USB stick reset or re-attached). Waiting up to ${DEVICE_WAIT_SECONDS}s for it to come back..." >&2
+    local waited=0 line name parent
+    while :; do
+        [ -e "$BACKUP_PART" ] && return 0
+        if [ -n "$BACKUP_UUID" ]; then
+            while IFS= read -r line; do
+                [ -n "$line" ] || continue
+                [ "$(get_column_value "$line" "UUID")" = "$BACKUP_UUID" ] || continue
+                name=$(get_column_value "$line" "NAME")
+                parent=$(lsblk -p -n -o PKNAME "$name" 2>/dev/null | head -n 1)
+                [ -n "$parent" ] && [ "$name" = "${parent}1" ] || continue
+                BACKUP_PART="$name"
+                BACKUP_DISK="$parent"
+                echo "   The drive is back as $BACKUP_PART." >&2
+                return 0
+            done < <(lsblk -p -n -P -o NAME,UUID 2>/dev/null)
+        fi
+        [ "$waited" -ge "$DEVICE_WAIT_SECONDS" ] && break
+        sleep 1
+        waited=$((waited + 1))
+    done
+    err "The USB drive did not come back. Unplug it, plug it in again, run mountall, then run this script again:"
+    echo "   if the label was already changed to '$FINAL_LABEL', the script resumes the restore from where it stopped." >&2
+    return 1
 }
 
 # --- Unmount every mount of a partition (SystemRescue's 'mountall' mounts everything) ---
@@ -229,6 +311,7 @@ unmount_all() {
 # --- Mount / unmount the backup partition at our own temporary mount point ---
 mount_backup() {
     local mode="$1"
+    ensure_backup_part || return 1
     if [ -z "$MOUNT_POINT" ]; then
         if ! MOUNT_POINT=$(mktemp -d /mnt/unraid_restore.XXXXXX); then
             err "Could not create a temporary mount point."
@@ -407,7 +490,11 @@ show_summary() {
     echo "  Last backup:     $marker_text"
     echo
     echo "  This will make that drive your main Unraid boot drive:"
-    echo "    - change its label from '$BACKUP_LABEL' to '$FINAL_LABEL'"
+    if [ "$RESUME" = true ]; then
+        echo "    - (its label is already '$FINAL_LABEL': an earlier restore did not finish)"
+    else
+        echo "    - change its label from '$BACKUP_LABEL' to '$FINAL_LABEL'"
+    fi
     echo "    - enable UEFI boot (EFI- -> EFI) and install the boot loader"
     echo
     echo "  Only continue if the original Unraid USB is dead or missing."
@@ -506,6 +593,8 @@ udev_sees_label() {
 LABEL_READ=""
 confirm_label() {
     local delay n=0 total=${#LABEL_RETRY_DELAYS[@]}
+    LABEL_READ=""
+    ensure_backup_part || return 1
     flush_device
     LABEL_READ=$(get_label "$BACKUP_PART")
     [ "$LABEL_READ" = "$FINAL_LABEL" ] && return 0
@@ -513,6 +602,7 @@ confirm_label() {
         n=$((n + 1))
         echo "   Label not confirmed yet (read '${LABEL_READ:-nothing}'); retrying in ${delay}s (retry $n of $total)..."
         sleep "$delay"
+        ensure_backup_part || return 1
         flush_device
         LABEL_READ=$(get_label "$BACKUP_PART")
         [ "$LABEL_READ" = "$FINAL_LABEL" ] && return 0
@@ -542,14 +632,19 @@ label_report() {
 
 # --- 3. Change the label ---
 relabel_backup() {
-    echo "Changing label from '$BACKUP_LABEL' to '$FINAL_LABEL'..."
-    if ! fatlabel "$BACKUP_PART" "$FINAL_LABEL"; then
+    if [ "$RESUME" = true ]; then
+        echo "Label is already '$FINAL_LABEL' (resuming); checking it..."
+    else
+        echo "Changing label from '$BACKUP_LABEL' to '$FINAL_LABEL'..."
+        ensure_backup_part || return 1
+    fi
+    if [ "$RESUME" != true ] && ! fatlabel "$BACKUP_PART" "$FINAL_LABEL"; then
         err "Failed to change the label. The partition may not be FAT32."
         return 1
     fi
-    RELABELED=true
+    [ "$RESUME" = true ] || RELABELED=true
     if ! confirm_label; then
-        err "Label check failed: the partition is now labelled '$LABEL_READ'."
+        err "Label check failed: the partition is labelled '$LABEL_READ' (expected '$FINAL_LABEL')."
         label_report >&2
         return 1
     fi
@@ -580,6 +675,7 @@ enable_uefi() {
 
 # --- 5a. Install the syslinux boot loader on the partition (USB must be unmounted) ---
 install_bootloader() {
+    ensure_backup_part || return 1
     echo "Installing the syslinux boot loader on $BACKUP_PART..."
     if ! "$WORK_DIR/syslinux_linux" -f --install "$BACKUP_PART"; then
         err "syslinux_linux failed to install the boot loader."
@@ -591,6 +687,7 @@ install_bootloader() {
 
 # --- 5b. Write Unraid's MBR (boot code plus the active-partition flag) and read it back ---
 write_mbr() {
+    ensure_backup_part || return 1
     echo "Writing the MBR to $BACKUP_DISK..."
     local size
     size=$(wc -c < "$WORK_DIR/mbr.bin" | tr -d ' ')
@@ -660,8 +757,9 @@ rollback() {
     if mountpoint -q "$MOUNT_POINT" 2>/dev/null; then
         umount "$MOUNT_POINT" 2>/dev/null
     fi
+    ensure_backup_part || ok=false
     unmount_all "$BACKUP_PART" || ok=false
-    if [ "$EFI_RENAMED" = true ]; then
+    if [ "$ok" = true ] && [ "$EFI_RENAMED" = true ]; then
         if mount_backup rw && mv "$MOUNT_POINT/EFI" "$MOUNT_POINT/EFI-"; then
             EFI_RENAMED=false
         else
@@ -669,7 +767,7 @@ rollback() {
         fi
         mountpoint -q "$MOUNT_POINT" 2>/dev/null && { sync; umount "$MOUNT_POINT" 2>/dev/null; }
     fi
-    if [ "$RELABELED" = true ]; then
+    if [ "$ok" = true ] && [ "$RELABELED" = true ]; then
         if fatlabel "$BACKUP_PART" "$BACKUP_LABEL"; then
             RELABELED=false
         else
@@ -681,6 +779,8 @@ rollback() {
         echo "   (Boot-loader files written during the attempt are harmless and will be rewritten.)"
     else
         err "Could not fully restore the original state automatically."
+        echo "   If the stick vanished: unplug it, plug it in again, run mountall, then run this script again. It resumes an" >&2
+        echo "   unfinished restore on its own (a stick already labelled $FINAL_LABEL that still has its BACKUP-* marker)." >&2
         echo "   Check the drive by hand:" >&2
         echo "     fatlabel $BACKUP_PART            (should print $BACKUP_LABEL)" >&2
         echo "     fatlabel $BACKUP_PART $BACKUP_LABEL    (to set it back)" >&2

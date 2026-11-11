@@ -2,6 +2,22 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
+## [1.2.2] - 2026-11-11
+
+### Fixed
+- **`move_dr_to_unraid.sh`: survives the USB stick dropping off the system mid-restore, and can resume a half-finished one.**
+  Found on real hardware: right after `fatlabel` the stick vanished (`/dev/sdb1` gone; `blkid`, `lsblk` and `fatlabel` read
+  nothing), the label check failed, and the rollback could not restore `UNRAID_DR`, leaving a stick labelled `UNRAID` with no boot
+  loader. The next identical run succeeded, so the drop is intermittent.
+  - The partition's filesystem UUID is remembered. Before the relabel, label checks, mounts, boot-loader install, MBR write and
+    rollback, a missing device is waited for (up to 30s) and found again by UUID, even under a new name (sdb -> sdc)
+  - If it never returns, the message says to replug, run `mountall` and run the script again
+  - A USB first partition already labelled `UNRAID` that still carries its `BACKUP-*` marker is treated as an unfinished restore
+    and resumed (label step only verified, rollback never changes its label). A drive with no marker is still refused, so a real
+    Unraid flash is never touched. See D-1.2.2-01 and D-1.2.2-02
+  - `test_move_dr.sh` now has 191 checks
+- Existing recovery USBs: run `setup_ventoy_usb.sh` again to upgrade to 1.2.2
+
 ## [1.2.1] - 2026-11-09
 
 ### Fixed
