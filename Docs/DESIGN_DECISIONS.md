@@ -551,3 +551,15 @@ Not built, not decided; listed so they are not lost. Each needs the owner's go-a
 #### D-1.3.0-04 — The scrub checks the live drive and, with `-backup`, only the local `UNRAID_DR` USB
 - **Decision:** `scrub_remote_backup` and the "`remote.ini` decides" choice are gone; `-backup` always checks the local USB.
   A leftover `remote.ini` is ignored.
+
+### 1.3.1
+
+#### D-1.3.1-01 — `main_backup` returns instead of exiting, so every failure sends the notification and the final line
+- **Decision:** the four `exit 1` calls inside `main_backup` (drive state not loaded, `UNRAID` not at `/boot`, no `UNRAID_DR`,
+  multiple `UNRAID_DR`) are now `return 1`. The main flow already turned a non-zero return into `notify_failure` and the
+  `finished WITH ERRORS (exit N)` line. Exit code is still 1. This lifts the limit recorded in D-1.3.0-02.
+- **Why:** a Komodo action now runs the backup daily and decides pass/fail from the final log line (Komodo reports exit codes
+  unreliably, issue #597). Those paths printed neither line, so the owner got no GUI notification for the most likely
+  failure (USB unplugged).
+- **Not changed:** failures before logging starts (bad option, bad `dr_usb.ini`) still `exit 1`; there is no log to notify about.
+

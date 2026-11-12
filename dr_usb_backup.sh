@@ -68,7 +68,7 @@ main_backup() {
     # Load the drive state
     if ! load_drive_state; then
         log_message "FATAL: Failed to load drive state"
-        exit 1
+        return 1
     fi
     
     # Find the main UNRAID boot partition for logging
@@ -89,7 +89,7 @@ main_backup() {
     
     if [ "$unraid_found" = false ]; then
         log_message "FATAL: Could not find the primary 'UNRAID' partition mounted at /boot. Aborting."
-        exit 1
+        return 1
     fi
     
     # Scan for UNRAID_DR partition
@@ -140,7 +140,7 @@ main_backup() {
     if [ ${#unraid_dr_partitions[@]} -eq 0 ]; then
         log_message "ERROR: No 'UNRAID_DR' backup partition was found."
         log_message "ERROR: Please run the 'dr_usb_create.sh' script from an SSH terminal to set one up."
-        exit 1
+        return 1
     
     elif [ ${#unraid_dr_partitions[@]} -gt 1 ]; then
         log_message "ERROR: Multiple partitions with the label 'UNRAID_DR' found. You must have only one."
@@ -156,7 +156,7 @@ main_backup() {
         done
         
         log_message "ERROR: Exiting script. Please resolve the duplicate UNRAID_DR labels."
-        exit 1
+        return 1
     
     else
         # Exactly one partition found, proceed with backup.

@@ -12,6 +12,7 @@ cd "$TMP_DIR"
 out=$(bash "$SCRIPT" -lsblk 2>&1); rc=$?
 assert_eq "no UNRAID_DR: exits 1" "1" "$rc"
 assert_contains "no UNRAID_DR: explained" "$out" "No 'UNRAID_DR' backup partition was found"
+assert_contains "no UNRAID_DR: final failure line is printed (1.3.1)" "$out" "BACKUP** script finished WITH ERRORS (exit 1)"
 assert_contains "dr_usb.ini is used" "$out" "SNAPSHOTS=3"
 assert_contains "settings file is logged" "$out" "Settings file: $DR_USB_INI"
 logs=$(ls "$TMP_DIR/logs/logs" 2>/dev/null)

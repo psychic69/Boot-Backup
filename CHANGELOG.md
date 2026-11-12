@@ -2,6 +2,14 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
+## [1.3.1] - 2026-11-12
+
+### Fixed
+- **`dr_usb_backup.sh`: early failures now reach the failure handling.** "No `UNRAID_DR` partition", "multiple `UNRAID_DR`", "`UNRAID`
+  not mounted at `/boot`" and a failed drive-state load called `exit 1` inside `main_backup`, so the run ended without the
+  `finished WITH ERRORS` line and without the `notify_failure` GUI notification. They now `return 1`; the exit code is unchanged
+  (1). A scheduler or wrapper can rely on the final `script completed.` / `finished WITH ERRORS` line. See D-1.3.1-01
+
 ## [1.3.0] - 2026-11-11
 
 ### Removed
