@@ -25,17 +25,18 @@ ar="$REPO_ROOT/dist/Boot-Backup-$VER.tar.gz"
 [ -f "$ar" ] && pass "archive named after VERSION" || fail "archive named after VERSION" "$ar"
 [ -f "$ar.sha256" ] && pass "sha256 file written" || fail "sha256 file written"
 list=$(tar -tzf "$ar")
-for f in dr_usb/VERSION dr_usb/dr_usb_backup.sh dr_usb/dr_usb_create.sh dr_usb/dr_usb_scrub.sh dr_usb/dr_usb.ini.example dr_usb/remote.ini.example \
-         dr_usb/lib/logging.sh dr_usb/lib/drives.sh dr_usb/lib/integrity.sh dr_usb/lib/clone.sh dr_usb/lib/config.sh dr_usb/lib/remote.sh \
+for f in dr_usb/VERSION dr_usb/dr_usb_backup.sh dr_usb/dr_usb_create.sh dr_usb/dr_usb_scrub.sh dr_usb/dr_usb.ini.example \
+         dr_usb/lib/logging.sh dr_usb/lib/drives.sh dr_usb/lib/integrity.sh dr_usb/lib/clone.sh dr_usb/lib/config.sh \
          dr_usb/Recovery-ISO/scripts/setup_ventoy_usb.sh dr_usb/Recovery-ISO/scripts/setup_ventoy.ini dr_usb/Recovery-ISO/scripts/move_dr_to_unraid.sh; do
     assert_contains "archive contains $f" "$list" "$f"
 done
-for f in "dr_usb/dr_usb.ini" "dr_usb/remote.ini"; do
+for f in "dr_usb/dr_usb.ini"; do
     if printf '%s\n' "$list" | grep -qx "$f"; then fail "archive excludes your settings file $f"; else pass "archive excludes your settings file $f"; fi
 done
 for f in "id_ed25519" "known_hosts" "dist/" "Unit Test" "Docs/"; do
     assert_not_contains "archive excludes $f" "$list" "$f"
 done
+assert_not_contains "no remote code (removed in 1.3.0)" "$list" "remote"
 assert_not_contains "no macOS ._ metadata files" "$list" "._"
 mkdir -p "$TMP_DIR/ex"; tar -xzf "$ar" -C "$TMP_DIR/ex" --no-same-owner --no-same-permissions
 ok=true; for f in $(cd "$TMP_DIR/ex/dr_usb" && find . -name '*.sh'); do bash -n "$TMP_DIR/ex/dr_usb/$f" || ok=false; done

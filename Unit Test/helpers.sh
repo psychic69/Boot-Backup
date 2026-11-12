@@ -46,7 +46,7 @@ run_pty() {
     python3 -I "$TEST_DIR/pty_drive.py" "$inputs" "$@"
 }
 
-# ---- fake Unraid flash drive for the integrity / remote tests ----
+# ---- fake Unraid flash drive for the integrity tests ----
 sha_of() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | awk '{print $1}'; }
 make_boot() {   # $1 = dir ; builds a healthy fake /boot with Unraid-style bare-hash .sha256 files, in root and previous/
     rm -rf "$1"; mkdir -p "$1/previous" "$1/config/plugins" "$1/syslinux" "$1/EFI-/boot" "$1/logs" "$1/.git"

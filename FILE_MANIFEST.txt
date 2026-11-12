@@ -3,7 +3,7 @@
 ═══════════════════════════════════════════════════════════════
 
 Generated: 2026-11-09
-Version: 1.2.3
+Version: 1.3.0
 
 ───────────────────────────────────────────────────────────────
 SCRIPTS (Ready to Use)
@@ -14,15 +14,13 @@ SCRIPTS (Ready to Use)
 ✓ setup_ventoy_usb.sh           Script to create recovery USB (with Ventoy bootstrap)
 ✓ setup_ventoy.ini              Configuration file (versions, URLs, parameters)
 ✓ move_dr_to_unraid.sh          Emergency recovery script
-✓ remote.ini.example            Template for dr_usb_backup.sh -remote (copy to /boot/config/plugins/dr_usb/remote.ini)
-✓ dr_usb_scrub.sh               Maintenance scrub: live /boot always; -backup also the remote mirror or the local UNRAID_DR USB
+✓ dr_usb_scrub.sh               Maintenance scrub: live /boot always; -backup also the local UNRAID_DR USB
 ✓ dr_usb.ini.example            Template for dr_usb.ini: settings shared by dr_usb_create.sh and dr_usb_backup.sh
 ✓ lib/logging.sh                Shared module: logging, log rotation, run_logged
 ✓ lib/drives.sh                 Shared module: lsblk drive-state helpers
 ✓ lib/integrity.sh              Shared module: boot-file hash checks (root + previous/) and the backup manifest
 ✓ lib/clone.sh                  Shared module: clone_backup (rsync to the UNRAID_DR USB)
 ✓ lib/config.sh                 Shared module: defaults, dr_usb.ini loading, validation
-✓ lib/remote.sh                 Shared module: remote destination config, SSH key staging, rrsync checks
 ✓ VERSION                       Single release version (SCRIPT_VERSION=x.y.z), at the repo root
 ✓ build_release.sh              Builds dist/Boot-Backup-<version>.tar.gz for GitHub Releases (developers)
 ✓ Unit Test/run_tests.sh        Runs all Unit Test/test_*.sh (fixtures in Unit Test/fixtures/)
@@ -67,8 +65,8 @@ Root Directory:
   INDEX.md                      ← NAVIGATION
   FILE_MANIFEST.txt             ← YOU ARE HERE
   VERSION                       ← Single version for the whole release
-  dr_usb_create.sh / dr_usb_backup.sh   ← Backup USB creation / automated backup (-remote available)
-  dr_usb.ini.example / remote.ini.example   ← Settings templates (copy to dr_usb.ini / remote.ini)
+  dr_usb_create.sh / dr_usb_backup.sh   ← Backup USB creation / automated backup
+  dr_usb.ini.example            ← Settings template (copy to dr_usb.ini)
   lib/                          ← Shared modules (logging, drives, clone, config)
   build_release.sh              ← Builds the release archive (developers)
   Unit Test/                    ← Automated tests (run_tests.sh)
@@ -218,6 +216,11 @@ Community:
 ───────────────────────────────────────────────────────────────
 VERSION HISTORY
 ───────────────────────────────────────────────────────────────
+
+1.3.0 - 2026-11-11
+  - Removed all remote backup code: dr_usb_backup.sh -remote, lib/remote.sh, remote.ini.example, the remote-mirror
+    check in dr_usb_scrub.sh and the REMOTE_INI setting. notify_failure is kept and now also fires on a failed local
+    backup; NOTIFY_ON_FAILURE moved to dr_usb.ini. New license-slot warning in the docs
 
 1.2.3 - 2026-11-11
   - lib/remote.sh: the -remote restriction check runs `id` instead of `true` (rrsync 3.4.1 accepts a bare `true`, which made

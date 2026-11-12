@@ -2,6 +2,26 @@
 
 All notable changes to the Unraid Boot Backup Suite are documented in this file.
 
+## [1.3.0] - 2026-11-11
+
+### Removed
+- **The entire remote backup.** `dr_usb_backup.sh -remote`, `lib/remote.sh`, `remote.ini.example`, the remote-mirror check in
+  `dr_usb_scrub.sh` (`-backup` now always checks the local `UNRAID_DR` USB), the `REMOTE_INI` setting, and the `-remote` rejection
+  in `dr_usb_create.sh`. `-remote` is now an unknown option. The two remote test files were deleted and the other tests updated.
+  See D-1.3.0-01 for why, the options considered, and what was learned. The last version with remote code is commit `d1101d3`
+  (1.2.3, never tagged) and the `v1.2.2` tag.
+  - Upgrading: a leftover `remote.ini`, key or `known_hosts` on the flash drive is ignored and can be deleted
+
+### Changed
+- `notify_failure` is kept and now also fires when the local backup's clone fails (title "Boot backup problem"). `NOTIFY_ON_FAILURE`
+  moved from `remote.ini` to `dr_usb.ini` (default `true`, validated). See D-1.3.0-02
+- The release archive has 14 files (was 16)
+
+### Added
+- **License-slot warning** in the README, GETTING_STARTED, `dr_usb_create.md` and `dr_usb_backup.md`: Unraid counts every attached
+  storage device against your license when it boots, so check for a spare slot and remove the `UNRAID_DR` USB before rebooting
+  if there is none. See D-1.3.0-03
+
 ## [1.2.3] - 2026-11-11
 
 ### Fixed

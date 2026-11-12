@@ -32,13 +32,6 @@ while [[ $# -gt 0 ]]; do
             USE_TEST_FILE=true
             shift
             ;;
-        -remote)
-            echo "FATAL: -remote is not supported by dr_usb_create.sh." >&2
-            echo "FATAL: The backup USB (UNRAID_DR) must be created locally, on the Unraid server that holds the" >&2
-            echo "FATAL: boot drive you want to protect. -remote is only for dr_usb_backup.sh." >&2
-            echo "FATAL: After creating the USB here, use 'dr_usb_backup.sh -remote' to mirror /boot to another server." >&2
-            exit 1
-            ;;
         *)
             # Use quotes around "$1" to properly display empty strings
             echo "Unknown option: \"$1\""

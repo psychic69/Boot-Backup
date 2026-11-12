@@ -1,6 +1,6 @@
 #!/bin/bash
 # End-to-end runs of dr_usb_backup.sh against sample drive data (-lsblk): module loading, dr_usb.ini,
-# logging, error exit codes, and the -remote path. No drive is touched.
+# logging, and error exit codes. No drive is touched.
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 echo "test_backup_flow"
 SCRIPT="$REPO_ROOT/dr_usb_backup.sh"
@@ -23,13 +23,10 @@ out=$(bash "$SCRIPT" -lsblk 2>&1); rc=$?
 assert_eq "invalid dr_usb.ini: exits 1" "1" "$rc"
 assert_contains "invalid dr_usb.ini: explained" "$out" "SNAPSHOTS must be greater than or equal to 1"
 
-# -remote without a remote.ini beside the script
+# -remote was removed in 1.3.0: it is an unknown option now
 printf 'LOG_DIR="%s/logs"\n' "$TMP_DIR" > "$DR_USB_INI"
-if command -v flock >/dev/null 2>&1; then
-    out=$(bash "$SCRIPT" -remote 2>&1); rc=$?
-    assert_eq "-remote without remote.ini: exits 1" "1" "$rc"
-    assert_contains "-remote without remote.ini: explained" "$out" "Remote config file not found"
-else
-    skip "-remote without remote.ini" "flock not available here; runs on Linux/Unraid"
-fi
+out=$(bash "$SCRIPT" -remote 2>&1); rc=$?
+assert_eq "-remote is gone: exits 1" "1" "$rc"
+assert_contains "-remote is gone: unknown option" "$out" "Unknown option"
+assert_not_contains "-remote is gone: not in the usage line" "$out" "[-remote]"
 finish

@@ -1,13 +1,13 @@
 #!/bin/bash
-# dr_usb_scrub.sh: live /boot check, the local UNRAID_DR check, the remote mirror check, and the failure report.
+# dr_usb_scrub.sh: live /boot check, the local UNRAID_DR check, and the failure report.
 # Everything external is stubbed; the "drives" are folders under a temp directory.
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 SCRIPT_DIR="$REPO_ROOT"
 source "$REPO_ROOT/lib/logging.sh"; source "$REPO_ROOT/lib/drives.sh"; source "$REPO_ROOT/lib/integrity.sh"
-source "$REPO_ROOT/lib/config.sh"; source "$REPO_ROOT/lib/remote.sh"
+source "$REPO_ROOT/lib/config.sh"
 echo "test_scrub"
-LOG_FILE=""; DEBUG=false; SSH_KEY_TMP=""
-load_fns "$REPO_ROOT/dr_usb_scrub.sh" report_cache_bypass add_hash_findings scrub_live scrub_local_backup scrub_remote_backup report_results main_scrub
+LOG_FILE=""; DEBUG=false
+load_fns "$REPO_ROOT/dr_usb_scrub.sh" report_cache_bypass add_hash_findings scrub_live scrub_local_backup report_results main_scrub
 log_message() { echo "$1"; }
 declare -a current_drive_state FINDINGS WARNINGS
 
@@ -17,28 +17,11 @@ mountpoint() { return "${BOOT_MOUNTED_RC:-0}"; }
 findmnt()    { return 0; }
 mount()      { echo "mount $*" >> "$CALLS"; return "${MOUNT_RC:-0}"; }
 umount()     { echo "umount $*" >> "$CALLS"; return 0; }
-flock()      { return 0; }
 notify_failure() { echo "notify: $1" >> "$CALLS"; }
-ssh()   { echo "ssh $*" >> "$CALLS"; case "${*: -1}" in id) return "${SSH_TRUE_RC:-1}" ;; esac; return 0; }
-rsync() {
-    echo "rsync $*" >> "$CALLS"
-    case "$*" in
-        *.dr_usb_probe*) return 0 ;;
-        *--itemize-changes*) printf '%b' "${COMPARE_OUT:-}"; return "${COMPARE_RC:-0}" ;;
-    esac
-}
 quiet() { "$@" >"$TMP_DIR/out" 2>&1; local rc=$?; OUT=$(cat "$TMP_DIR/out"); return $rc; }
 calls() { cat "$CALLS" 2>/dev/null; }
 
 # ---- fixtures ----
-ssh-keygen -q -t ed25519 -N "" -f "$TMP_DIR/key" -C test || { echo "ssh-keygen unavailable"; exit 1; }
-echo "backup.lan ssh-ed25519 AAAA" > "$TMP_DIR/kh"
-cat > "$TMP_DIR/remote.ini" <<INI
-REMOTE_HOST="backup.lan"
-REMOTE_USER="unraidbackup"
-SSH_KEY_FILE="$TMP_DIR/key"
-SSH_KNOWN_HOSTS="$TMP_DIR/kh"
-INI
 cat > "$TMP_DIR/test-lsblk" <<EOS
 NAME="sdc" UUID="" FSTYPE="" SIZE="16008609792" MOUNTPOINT="" LABEL="" TRAN="usb"
 NAME="sdc1" UUID="u" FSTYPE="vfat" SIZE="16007561216" MOUNTPOINT="" LABEL="UNRAID_DR" TRAN=""
@@ -46,11 +29,10 @@ EOS
 setup() {
     make_boot "$TMP_DIR/boot"; mkdir -p "$TMP_DIR/boot/config"; echo live-config > "$TMP_DIR/boot/config/disk.cfg"
     BOOT_DIR="$TMP_DIR/boot"; CHECK_BACKUP=false; FINDINGS=(); WARNINGS=(); BOOT_MOUNTED_RC=0
-    REMOTE_INI="$TMP_DIR/no-such-remote.ini"; USE_TEST_FILE=true; NOTIFY_ON_FAILURE=true
-    SSH_TRUE_RC=1; COMPARE_OUT=""; COMPARE_RC=0; MOUNT_RC=0; : > "$CALLS"; current_drive_state=()
+    USE_TEST_FILE=true; NOTIFY_ON_FAILURE=true
+    MOUNT_RC=0; : > "$CALLS"; current_drive_state=()
     # the local backup USB: a copy of the live tree plus its manifest, "mounted" at CLONE_MP
     CLONE_MP="$TMP_DIR/dr"; rm -rf "$CLONE_MP"; cp -R "$TMP_DIR/boot" "$CLONE_MP"; write_backup_manifest "$CLONE_MP" >/dev/null
-    RSYNC_TIMEOUT=120; SSH_CONNECT_TIMEOUT=15
 }
 cd "$TMP_DIR"
 
@@ -104,30 +86,11 @@ setup; CHECK_BACKUP=true; : > "$TMP_DIR/test-lsblk.empty"; cp "$TMP_DIR/test-lsb
 quiet main_scrub; assert_eq "no UNRAID_DR USB: fails" "1" "$?"; assert_contains "explained" "$OUT" "FOUND 0"; cp "$TMP_DIR/test-lsblk.bak" "$TMP_DIR/test-lsblk"
 setup; CHECK_BACKUP=true; MOUNT_RC=1; quiet main_scrub; assert_eq "backup USB will not mount: fails" "1" "$?"; assert_contains "explained" "$OUT" "COULD NOT BE MOUNTED"
 
-# ---------------- remote.ini decides: remote ----------------
-setup; CHECK_BACKUP=true; REMOTE_INI="$TMP_DIR/remote.ini"; quiet main_scrub
-assert_eq "remote, nothing differs: clean" "0" "$?"; assert_contains "chose the remote check" "$OUT" "REMOTE mirror"
-assert_not_contains "remote.ini present: the local USB is not touched" "$(calls)" "mount -o ro"
-cmp_call=$(calls | grep -- '--itemize-changes')
-assert_contains "dry run" "$cmp_call" "-rlcn"; assert_not_contains "never deletes" "$cmp_call" "--delete"
-assert_contains "goes to the rrsync root" "$cmp_call" "unraidbackup@backup.lan:./"
-assert_contains "compares bzroot" "$cmp_call" "--include=/bzroot "; assert_contains "compares previous/bzmodules" "$cmp_call" "--include=/previous/bzmodules "
-assert_contains "compares the .sha256 files" "$cmp_call" "--include=/bzroot.sha256 "; assert_contains "ends by excluding everything else" "$cmp_call" "--exclude=*"
-assert_not_contains "config/ is never compared" "$cmp_call" "config"
-setup; CHECK_BACKUP=true; REMOTE_INI="$TMP_DIR/remote.ini"; COMPARE_OUT='>fc.t...... bzmodules\n>f+++++++++ previous/bzroot\n.d..t...... ./\n'; quiet main_scrub
-assert_eq "remote differences: fails" "1" "$?"; assert_contains "differing file named" "$OUT" "[REMOTE MIRROR]  bzmodules"
-assert_contains "missing file named" "$OUT" "[REMOTE MIRROR]  previous/bzroot"; assert_contains "missing explained" "$OUT" "MISSING on the remote mirror"
-assert_contains "two problems counted (the directory line is ignored)" "$OUT" "2 PROBLEM(S) FOUND"
-assert_contains "advice for the remote mirror" "$OUT" "the remote copy differs from your verified live drive"
-setup; CHECK_BACKUP=true; REMOTE_INI="$TMP_DIR/remote.ini"; COMPARE_RC=23; COMPARE_OUT='rsync: some error\n'; quiet main_scrub
-assert_eq "comparison cannot run: fails" "1" "$?"; assert_contains "reported" "$OUT" "THE CHECKSUM COMPARISON COULD NOT RUN (rsync exit 23)"
-setup; CHECK_BACKUP=true; REMOTE_INI="$TMP_DIR/remote.ini"; SSH_TRUE_RC=0; quiet main_scrub
-assert_eq "unrestricted key: fails" "1" "$?"; assert_contains "reported" "$OUT" "KEY IS NOT RESTRICTED"; assert_not_contains "no comparison attempted" "$(calls)" "--itemize-changes"
-setup; CHECK_BACKUP=true; REMOTE_INI="$TMP_DIR/remote.ini"; echo bad >> "$BOOT_DIR/bzroot"; quiet main_scrub
-assert_eq "live corrupted AND remote clean: still fails" "1" "$?"; assert_contains "live problem reported" "$OUT" "[LIVE $BOOT_DIR]  bzroot"
-setup; CHECK_BACKUP=true; REMOTE_INI="$TMP_DIR/remote.ini"; echo bad >> "$BOOT_DIR/bzroot"; COMPARE_OUT='>fc.t...... bzroot\n'; quiet main_scrub
-assert_contains "both areas reported together" "$OUT" "2 PROBLEM(S) FOUND"
-cleanup_remote
+# ---------------- the remote mirror check was removed in 1.3.0: -backup always checks the local USB ----------------
+setup; CHECK_BACKUP=true; : > "$TMP_DIR/remote.ini"; quiet main_scrub
+assert_eq "a leftover remote.ini changes nothing: clean" "0" "$?"; assert_contains "-backup checks the LOCAL UNRAID_DR USB" "$OUT" "LOCAL UNRAID_DR USB"
+assert_not_contains "no remote check is mentioned" "$OUT" "REMOTE"
+assert_contains "the local USB was mounted read-only" "$(calls)" "mount -o ro"
 
 # ---------------- the script itself: options and missing modules ----------------
 out=$(bash "$REPO_ROOT/dr_usb_scrub.sh" -bogus 2>&1); rc=$?

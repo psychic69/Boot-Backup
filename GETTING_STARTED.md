@@ -83,24 +83,6 @@ bash /boot/config/plugins/dr_usb/dr_usb_create.sh
 
 ---
 
-### Optional: Mirror Your Boot Drive to Another Server (remote backup)
-
-Want an extra, off-box copy? `dr_usb_backup.sh -remote` makes a 1:1 mirror of `/boot` on another machine over SSH. It is **in addition to** the local `UNRAID_DR` USB backup above (it runs separately and does not touch the USB), so keep Steps 1 and 2.
-
-**What you need:** a Linux server with SSH, `rsync` and **`rrsync`** (required: it locks the backup key to rsync-only, write-only, one folder), a dedicated user and backup folder on it, and about 10 minutes.
-
-**The short version:**
-1. In `/boot/config/plugins/dr_usb/`, copy `remote.ini.example` to `remote.ini` and fill in the host and user.
-2. Create an SSH key on the Unraid server, authorize it on the remote server with an `rrsync` line, and pin the server's host key.
-3. Test with `bash /boot/config/plugins/dr_usb/dr_usb_backup.sh -remote -debug` (dry run; nothing is copied).
-4. Schedule a second User Script containing `bash /boot/config/plugins/dr_usb/dr_usb_backup.sh -remote`.
-
-**Full step-by-step instructions, every `remote.ini` setting, and troubleshooting:** [docs/dr_usb_backup.md → Remote Backup](docs/dr_usb_backup.md#remote-backup--remote)
-
-> ⚠️ The mirror deletes files in the backup folder that no longer exist on `/boot`, so use a folder dedicated to this backup. `/boot` contains your license key and password hashes, so only mirror to a server you trust.
-
----
-
 ### Step 3: Create Recovery USB (5 minutes)
 
 **From Unraid Terminal:**
@@ -163,16 +145,6 @@ You should see:
 - ✅ New log file with timestamp
 - ✅ `LAST_BACKUP_SUCCESS.txt` updated with current date/time
 
-### Test the Remote Backup (if you set it up)
-
-```bash
-# Dry run - connects and lists what would be copied, changes nothing
-bash /boot/config/plugins/dr_usb/dr_usb_backup.sh -remote -debug
-
-# Check the newest log for "Remote connection OK" and "script completed"
-ls -t /boot/logs/unraid-dr/logs/ | head -1
-```
-
 ## What Happens Now?
 
 ### Daily Operation (Automatic)
@@ -214,9 +186,6 @@ ls -lh /mnt/disks/UNRAID_DR/
 # Manually run backup (for testing)
 # From WebGUI: Settings → User Scripts → DR_USB_Backup → "Run in Background"
 
-# Mirror /boot to the remote server now (after setting up remote.ini)
-bash /boot/config/plugins/dr_usb/dr_usb_backup.sh -remote
-
 # Recreate backup USB from scratch
 bash /boot/config/plugins/dr_usb/dr_usb_create.sh
 ```
@@ -224,9 +193,9 @@ bash /boot/config/plugins/dr_usb/dr_usb_create.sh
 ## Important Notes
 
 ### ⚠️ License Slot Warning
-The backup USB (`UNRAID_DR`) consumes a license slot if kept in system during boot. To avoid:
-- **Option 1:** Remove before shutdown
-- **Option 2:** Insert after array starts
+Unraid counts every attached storage device against your license's device limit when it boots and starts the array. The backup USB (`UNRAID_DR`) counts as one. **Check how many device slots your license has left.** If there is no spare slot, the array will not start after a reboot while the `UNRAID_DR` USB is plugged in. To avoid this:
+- **Option 1:** Remove the `UNRAID_DR` USB **before you reboot or shut down**
+- **Option 2:** Plug it in **after the array has started** (creating it and backing up both work while the array is running)
 
 ### 🛑 SSH Required for Creation
 `dr_usb_create.sh` is interactive and **must** be run from SSH. It will hang if run from GUI.
@@ -278,7 +247,6 @@ Store your Ventoy recovery USB in a safe location separate from your server. You
 - "No UNRAID_DR found" → Run `dr_usb_create.sh` first
 - "Multiple UNRAID_DR found" → Remove duplicate drive
 - "Can't run from GUI" → Use SSH for `dr_usb_create.sh`
-- Remote backup problems (SSH, keys, `remote.ini`) → See the troubleshooting table in [docs/dr_usb_backup.md](docs/dr_usb_backup.md#remote-backup--remote)
 
 ---
 

@@ -22,7 +22,8 @@ You **MUST** run this script from an **SSH terminal**.
 * **Smart Formatting:** Wipes, partitions, and formats the selected drive as FAT32 with the required `UNRAID_DR` label.
 * **Size Aware:** If a drive is > 64GB, it creates a 64GB partition to ensure compatibility.
 * **First Backup:** Automatically runs the first backup (`clone_backup`) after formatting is complete.
-* **Runs on the Unraid server only:** The backup USB must be created on the Unraid server whose boot drive it protects. The script stops with a clear message on any other machine, and `-remote` (a `dr_usb_backup.sh` option) is rejected with an explanation. The `-lsblk` test mode skips the check because it never changes a drive.
+* **Runs on the Unraid server only:** The backup USB must be created on the Unraid server whose boot drive it protects. The script stops with a clear message on any other machine. The `-lsblk` test mode skips the check because it never changes a drive.
+* **License slots:** Unraid counts every attached storage device against your license when it boots, and the `UNRAID_DR` USB counts as one. Plugging the USB in while the array is running (as you do to create it) is fine, but if your license has no spare slot, **remove it before you reboot** or the array will not start.
 * **Checks your Unraid files first:** Before the first backup is copied, every boot file in `/boot` and `/boot/previous` is verified against the `.sha256` file Unraid ships with it. If anything is damaged the script stops without copying. A manifest of `config/` and the other small files (`DR_MANIFEST.sums`) is written onto the new backup USB for the emergency restore to check.
 * **Failsafe:** If an `UNRAID_DR` drive is *already* found, this script will exit with an error, protecting your existing backup.
 

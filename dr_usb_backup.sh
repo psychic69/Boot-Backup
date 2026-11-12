@@ -8,10 +8,7 @@ USE_TEST_FILE=false
 LOG_FILE=""
 BOOT_SIZE=""
 CLONE_DEVICE=""
-REMOTE_MODE=false
 BOOT_DIR="/boot"      # the Unraid flash drive; only the tests change this
-SSH_KEY_TMP=""
-NOTIFY_ON_FAILURE=true
 
 # Handle argument parsing for both User Scripts (passes path or "" as $1) 
 # and standalone execution.
@@ -36,14 +33,10 @@ while [[ $# -gt 0 ]]; do
             USE_TEST_FILE=true
             shift
             ;;
-        -remote)
-            REMOTE_MODE=true
-            shift
-            ;;
         *)
             # Use quotes around "$1" to properly display empty strings
             echo "Unknown option: \"$1\""
-            echo "Usage: $0 [-debug] [-lsblk] [-remote]"
+            echo "Usage: $0 [-debug] [-lsblk]"
             exit 1
             ;;
     esac
@@ -56,7 +49,7 @@ done
 #===============================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="${SCRIPT_DIR}/lib"
-for _lib in logging drives integrity clone config remote; do
+for _lib in logging drives integrity clone config; do
     if [ ! -f "${LIB_DIR}/${_lib}.sh" ]; then
         echo "FATAL: Missing module ${LIB_DIR}/${_lib}.sh" >&2
         echo "FATAL: Install the full release archive into /boot/config/plugins/dr_usb/ and run the script from there." >&2
@@ -69,67 +62,6 @@ unset _lib
 
 
 
-
-#===============================================
-# REMOTE BACKUP (-remote)
-#===============================================
-
-# --- Mirror /boot to the remote server (1:1, with --delete) ---
-remote_backup() {
-    # Prevent overlapping runs
-    exec 9>/tmp/dr_usb_backup_remote.lock
-    if ! flock -n 9; then
-        log_message "ERROR: Another remote backup is already running. Exiting."
-        return 1
-    fi
-
-    load_remote_config || return 1
-
-    # Safety: only mirror when /boot really is the Unraid flash drive (--delete is used)
-    log_message "INFO: Verifying /boot looks like a healthy Unraid flash drive..."
-    if ! mountpoint -q "$BOOT_DIR" || [ ! -d "$BOOT_DIR/config" ] || [ ! -f "$BOOT_DIR/bzroot" ]; then
-        log_message "ERROR: /boot is not mounted or is missing config/ or bzroot. Refusing to mirror (would delete the remote copy)."
-        return 1
-    fi
-    log_message "INFO: /boot verified"
-
-    # Hard stop: never mirror a corrupted /boot over the good remote copy
-    if ! verify_boot_hashes "$BOOT_DIR"; then
-        log_message "ERROR: SOURCE /boot FAILED THE HASH CHECK. Mirror aborted so the remote copy is not overwritten with damaged files."
-        return 1
-    fi
-
-    remote_prepare || return 1
-
-    local -a rsync_args=(-rlth --delete-after --partial --stats "--timeout=$RSYNC_TIMEOUT" -e "ssh ${REMOTE_SSH_OPTS[*]}")
-    if [ "$RSYNC_BWLIMIT_KBPS" -gt 0 ]; then
-        rsync_args+=("--bwlimit=$RSYNC_BWLIMIT_KBPS")
-    fi
-    local pattern rc
-    for pattern in $RSYNC_EXCLUDES; do
-        rsync_args+=("--exclude=$pattern")
-    done
-    if [ "$DEBUG" = true ]; then
-        rsync_args+=(-v --dry-run)
-        log_message "INFO: DEBUG MODE - Running rsync with --dry-run (no changes will be made)"
-    fi
-    rsync_args+=("$BOOT_DIR/" "$REMOTE_TARGET:./")
-
-    log_message "INFO: Mirroring /boot/ to $REMOTE_TARGET (the folder set by rrsync on the server)..."
-    debug_print "rsync args: ${rsync_args[*]}"
-    rsync "${rsync_args[@]}" 2>&1 | while IFS= read -r line; do log_message "  rsync: $line"; done
-    rc=${PIPESTATUS[0]}
-
-    if [ $rc -eq 0 ]; then
-        log_message "INFO: Remote mirror completed successfully"
-    elif [ $rc -eq 24 ]; then
-        log_message "WARNING: rsync exit 24 (some source files vanished during transfer) - treating as success"
-    else
-        log_message "ERROR: Remote mirror FAILED (rsync exit code $rc)"
-        return 1
-    fi
-    return 0
-}
 
 # --- Main function (Backup) ---
 main_backup() {
@@ -275,19 +207,11 @@ log_message "INFO:   SNAPSHOTS=$SNAPSHOTS"
 log_message "INFO:   RETENTION_DAYS=$RETENTION_DAYS"
 log_message "INFO:   CLONE_MP=$CLONE_MP"
 
-trap cleanup_remote EXIT
-
-if [ "$REMOTE_MODE" = true ]; then
-    log_message "INFO: Mode: REMOTE (-remote) - mirroring /boot to the server defined in $REMOTE_INI"
-    remote_backup
-    backup_rc=$?
-    if [ $backup_rc -ne 0 ]; then
-        notify_failure "Remote mirror of /boot failed. See log: $LOG_FILE"
-    fi
-else
-    log_message "INFO: Mode: LOCAL - cloning /boot to the UNRAID_DR USB"
-    main_backup
-    backup_rc=$?
+log_message "INFO: Cloning /boot to the UNRAID_DR USB"
+main_backup
+backup_rc=$?
+if [ $backup_rc -ne 0 ]; then
+    notify_failure "Boot backup to the UNRAID_DR USB failed. See log: $LOG_FILE"
 fi
 
 if [ $backup_rc -ne 0 ]; then

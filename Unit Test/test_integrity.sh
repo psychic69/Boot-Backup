@@ -66,9 +66,6 @@ clone_copy=$(grep -n 'rsync "${rsync_args\[@\]}"' "$REPO_ROOT/lib/clone.sh" | he
 man_line=$(grep -n 'write_backup_manifest "\$CLONE_MP"' "$REPO_ROOT/lib/clone.sh" | head -1 | cut -d: -f1)
 unm_line=$(grep -n 'Unmounting \$clone_source from' "$REPO_ROOT/lib/clone.sh" | head -1 | cut -d: -f1)
 [ -n "$man_line" ] && [ -n "$unm_line" ] && [ "$man_line" -lt "$unm_line" ] && pass "manifest is written before the USB is unmounted" || fail "manifest is written before the USB is unmounted"
-rg_gate=$(grep -n 'verify_boot_hashes "\$BOOT_DIR"' "$REPO_ROOT/dr_usb_backup.sh" | head -1 | cut -d: -f1)
-rg_copy=$(grep -n 'rsync "${rsync_args\[@\]}"' "$REPO_ROOT/dr_usb_backup.sh" | head -1 | cut -d: -f1)
-[ -n "$rg_gate" ] && [ -n "$rg_copy" ] && [ "$rg_gate" -lt "$rg_copy" ] && pass "remote_backup verifies the source before rsync" || fail "remote_backup verifies the source before rsync (not wired yet?)"
 
 # ---- optional per-file cache bypass (used by the scrub) ----
 bf="$TMP_DIR/bypass_file"; echo data > "$bf"

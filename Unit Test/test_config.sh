@@ -10,7 +10,7 @@ assert_eq "default LOG_DIR" "/boot/logs/unraid-dr" "$LOG_DIR"
 assert_eq "default SNAPSHOTS" "10" "$SNAPSHOTS"
 assert_eq "default RETENTION_DAYS" "30" "$RETENTION_DAYS"
 assert_eq "default CLONE_MP" "/mnt/disks/usb-backup-temp" "$CLONE_MP"
-assert_eq "default REMOTE_INI is beside the scripts" "$SCRIPT_DIR/remote.ini" "$REMOTE_INI"
+assert_eq "default NOTIFY_ON_FAILURE" "true" "$NOTIFY_ON_FAILURE"
 assert_eq "no ini -> not loaded" "false" "$DR_USB_INI_LOADED"
 validate_parameters >/dev/null 2>&1; assert_eq "defaults validate" "0" "$?"
 
@@ -28,6 +28,13 @@ assert_eq "bad values fail validation" "1" "$rc"
 assert_contains "reports SNAPSHOTS" "$out" "SNAPSHOTS must be greater than or equal to 1"
 assert_contains "reports LOG_DIR" "$out" "LOG_DIR must be an absolute path"
 assert_contains "reports RETENTION_DAYS" "$out" "RETENTION_DAYS must be a number"
+
+printf 'NOTIFY_ON_FAILURE=false\n' > "$SCRIPT_DIR/dr_usb.ini"
+load_config; assert_eq "ini overrides NOTIFY_ON_FAILURE" "false" "$NOTIFY_ON_FAILURE"
+validate_parameters >/dev/null 2>&1; assert_eq "NOTIFY_ON_FAILURE=false validates" "0" "$?"
+printf 'NOTIFY_ON_FAILURE=maybe\n' > "$SCRIPT_DIR/dr_usb.ini"
+load_config; out=$(validate_parameters 2>&1); rc=$?
+assert_eq "NOTIFY_ON_FAILURE=maybe fails validation" "1" "$rc"; assert_contains "reports NOTIFY_ON_FAILURE" "$out" "NOTIFY_ON_FAILURE must be true or false"
 
 DR_USB_INI="$TMP_DIR/elsewhere.ini"; printf 'SNAPSHOTS=7\n' > "$DR_USB_INI"
 load_config; assert_eq "DR_USB_INI env override is honored" "7" "$SNAPSHOTS"

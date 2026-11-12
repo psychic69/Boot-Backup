@@ -123,10 +123,10 @@ remove_old_successful_logs() {
     return 0
 }
 
-# --- Send an Unraid GUI notification on failure (remote mode) ---
+# --- Send an Unraid GUI notification on failure ---
 notify_failure() {
     [ "$NOTIFY_ON_FAILURE" = true ] || return 0
     local notify="/usr/local/emhttp/webGui/scripts/notify"
     [ -x "$notify" ] || return 0
-    "$notify" -e "DR USB Backup" -s "Remote boot backup FAILED" -d "$1" -i alert >/dev/null 2>&1 || true
+    "$notify" -e "DR USB Backup" -s "Boot backup problem" -d "$1" -i alert >/dev/null 2>&1 || true
 }

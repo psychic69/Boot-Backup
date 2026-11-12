@@ -19,7 +19,7 @@ Complete guide to all documentation in the Unraid Boot Backup Suite.
 | **[docs/dr_usb_create.md](docs/dr_usb_create.md)** | How to create your backup USB (one-time setup) |
 | **[docs/DESIGN_DECISIONS.md](docs/DESIGN_DECISIONS.md)** | Why the project is built the way it is: a versioned journal of design decisions (for contributors) |
 | **[docs/dr_usb_scrub.md](docs/dr_usb_scrub.md)** | How to check your boot drive and backup for silent damage (weekly/monthly maintenance) |
-| **[docs/dr_usb_backup.md](docs/dr_usb_backup.md)** | How to automate daily backups, and mirror to a remote server with `-remote` |
+| **[docs/dr_usb_backup.md](docs/dr_usb_backup.md)** | How to automate daily backups |
 | **[docs/VENTOY_README.md](docs/VENTOY_README.md)** | How to create your recovery USB |
 
 ### For Developers
@@ -116,7 +116,6 @@ Complete guide to all documentation in the Unraid Boot Backup Suite.
 - Logging and log rotation
 - Installing the release archive and the optional `dr_usb.ini` settings file
 - Boot protection mechanisms
-- Remote backup over SSH (`-remote`): `remote.ini` variable reference, SSH key setup, scheduling, troubleshooting
 - Testing and troubleshooting
 - Integration with automation
 

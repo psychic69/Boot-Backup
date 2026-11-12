@@ -12,7 +12,7 @@ The suite consists of **two distinct backup scripts**:
 
 This separation ensures you never accidentally reformat your backup USB during routine backups, while keeping the recovery process simple and safe.
 
-> **⚠️ Important License Note:** The backup USB drive (UNRAID_DR) will consume a license slot if kept in the system during boot. To avoid this, only insert the backup USB after the array has started, or remove it before shutdown.
+> **⚠️ Important License Note: check your Unraid license before you leave the `UNRAID_DR` USB plugged in.** Unraid counts every attached storage device against your license's device limit when it boots and starts the array, and the backup USB counts as one. If your license has no spare slot, **the array will not start after a reboot** while the `UNRAID_DR` USB is plugged in. You can plug the USB in while the array is running (to create it or to back up), but **remove it before you reboot** unless you know you have a free slot.
 
 ## Table of Contents
 
@@ -115,7 +115,7 @@ sha256sum -c Boot-Backup-1.2.0.tar.gz.sha256        # must print: Boot-Backup-1.
 tar -xzf Boot-Backup-1.2.0.tar.gz -C /boot/config/plugins/ --no-same-owner --no-same-permissions
 ```
 
-This creates `/boot/config/plugins/dr_usb/`. To upgrade later, repeat with the new version: your own settings (`dr_usb.ini`, `remote.ini`, SSH keys) are not in the archive and are never overwritten. Settings are optional: copy `dr_usb.ini.example` to `dr_usb.ini` only if you want to change a default.
+This creates `/boot/config/plugins/dr_usb/`. To upgrade later, repeat with the new version: your own settings (`dr_usb.ini`) are not in the archive and are never overwritten. Settings are optional: copy `dr_usb.ini.example` to `dr_usb.ini` only if you want to change a default.
 
 ### Step 1: Create the Backup USB
 
@@ -193,7 +193,7 @@ These documents include:
 | Script | Purpose | Frequency | Risk Level | Description |
 |--------|---------|-----------|------------|-------------|
 | `dr_usb_create.sh` | **Create backup USB** | One-time | ⚠️ High (formats USB) | Initial setup - formats and creates backup USB |
-| `dr_usb_backup.sh` | **Update backup** | Daily/Weekly | ✅ Low (rsync only) | Incremental backups - safe for automation. `-remote` mirrors to another server instead ([guide](Docs/dr_usb_backup.md#remote-backup--remote)) |
+| `dr_usb_backup.sh` | **Update backup** | Daily/Weekly | ✅ Low (rsync only) | Incremental backups - safe for automation. |
 | `dr_usb_scrub.sh` | **Check for damage** | Weekly/Monthly | ✅ None (read-only) | Verifies the live `/boot` and (`-backup`) the backup against their hashes; loud report on any problem |
 | `setup_ventoy_usb.sh` | **Create recovery USB** | One-time, then re-run to upgrade (automatic; `-upgrade` is deprecated) | ⚠️ Medium (downloads ISO, installs Ventoy if needed) | Sets up emergency recovery environment with automatic Ventoy bootstrap |
 | `move_dr_to_unraid.sh` | **Emergency restore** | As needed | ⚠️ High (changes labels) | Restores UNRAID_DR → UNRAID during recovery |
@@ -248,8 +248,6 @@ These documents include:
 - Renames `EFI` directory to `EFI-` to prevent accidental boot from backup
 - Reports backup statistics (files transferred, size, duration)
 
-**Remote mode (`-remote`):** instead of the local `UNRAID_DR` USB, run `dr_usb_backup.sh -remote` to mirror `/boot` 1:1 to another server over SSH (rsync). Settings live in `remote.ini` (template: [`remote.ini.example`](remote.ini.example)), which goes in `/boot/config/plugins/dr_usb/` along with an SSH key and a pinned `known_hosts`. **The destination must lock the key to `rrsync` (write-only, one folder, no shell)**; the script refuses to run otherwise. Without `-remote`, nothing changes. **Full setup, a `remote.ini` variable reference and troubleshooting:** [Docs/dr_usb_backup.md → Remote Backup](Docs/dr_usb_backup.md#remote-backup--remote)
-
 **When to run:** 
 - Daily/weekly via User Scripts scheduler (recommended)
 - Via cron job
@@ -287,7 +285,7 @@ These documents include:
 **Purpose:** a regular check for silent damage to your boot files.
 
 - `dr_usb_scrub.sh` always checks the running `/boot` and `/boot/previous` against Unraid's own `.sha256` files.
-- `dr_usb_scrub.sh -backup` also checks your backup: the **remote mirror** if `remote.ini` exists, otherwise the **local `UNRAID_DR` USB**.
+- `dr_usb_scrub.sh -backup` also checks your **local `UNRAID_DR` USB** backup.
 - It never changes anything, and it ignores ordinary config changes made since the last backup (the backup is for disaster recovery, not a perfect sync).
 - On a problem it prints a loud report naming every bad file with its expected and actual hash and size, exits non-zero, and sends an Unraid notification.
 

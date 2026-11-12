@@ -27,7 +27,6 @@ Work top to bottom: the steps go from safest to most risky. Tick each box, and w
 | `/etc/unraid-version` exists? (`ls /etc/unraid-version`) | |
 | bash on Unraid (`bash --version \| head -1`) | |
 | rsync on Unraid (`rsync --version \| head -1`) | |
-| Destination OS, rsync and `rrsync -h` output | |
 | Spare USB sticks (sizes) | |
 | Release tested (`cat VERSION`) | 1.2.0 |
 
@@ -38,15 +37,15 @@ Work top to bottom: the steps go from safest to most risky. Tick each box, and w
 Run on a Linux machine or container (not the Unraid server; some tests need `python3`).
 
 - [ ] `bash "Unit Test/run_tests.sh"`
-- **Expect:** `ALL TESTS PASSED`. On Linux the two checks skipped on macOS (log rotation by count, the `-remote` check that needs `flock`) should now **run**, not skip.
+- **Expect:** `ALL TESTS PASSED`. On Linux the two checks skipped on macOS (log rotation by count) should now **run**, not skip.
 
 ## Step 1 - Build and install
 
-- [ ] On your dev machine: `bash build_release.sh`. **Expect:** `Built dist/Boot-Backup-1.2.0.tar.gz (... 16 files)` and a SHA-256 line.
+- [ ] On your dev machine: `bash build_release.sh`. **Expect:** `Built dist/Boot-Backup-1.2.0.tar.gz (... 14 files)` and a SHA-256 line.
 - [ ] Copy the `.tar.gz` and `.sha256` files to the Unraid server (`/tmp`).
 - [ ] On Unraid: `cd /tmp && sha256sum -c Boot-Backup-1.2.0.tar.gz.sha256`. **Expect:** `Boot-Backup-1.2.0.tar.gz: OK`.
 - [ ] `tar -xzf Boot-Backup-1.2.0.tar.gz -C /boot/config/plugins/ --no-same-owner --no-same-permissions`
-- [ ] `ls /boot/config/plugins/dr_usb /boot/config/plugins/dr_usb/lib`. **Expect:** the three scripts, `dr_usb.ini.example`, `remote.ini.example`, `VERSION`, `lib/` with `logging.sh drives.sh integrity.sh clone.sh config.sh remote.sh`, and `Recovery-ISO/`.
+- [ ] `ls /boot/config/plugins/dr_usb /boot/config/plugins/dr_usb/lib`. **Expect:** the three scripts, `dr_usb.ini.example`, `VERSION`, `lib/` with `logging.sh drives.sh integrity.sh clone.sh config.sh`, and `Recovery-ISO/`.
 - [ ] (Optional) `cp dr_usb.ini.example dr_usb.ini`. Not required: every value has a default.
 
 ## Step 2 - Scrub of the live drive (read-only, safe)
@@ -74,7 +73,7 @@ Needs an existing `UNRAID_DR` USB (if you have none yet, do step 5 first).
 
 ## Step 4 - Scrub of the local backup, and a failure drill
 
-- [ ] `bash /boot/config/plugins/dr_usb/dr_usb_scrub.sh -backup; echo "exit=$?"` (no `remote.ini` present)
+- [ ] `bash /boot/config/plugins/dr_usb/dr_usb_scrub.sh -backup; echo "exit=$?"`
   - **Expect:** `CHECKING THE LOCAL BACKUP USB (UNRAID_DR)`, `Boot file hashes OK` for the backup, `All N manifest file(s) match.`, `SCRUB CLEAN`, `exit=0`.
 - [ ] **Failure drill (backup USB only):** mount the `UNRAID_DR` USB read-write and damage one **small** file:
   ```
@@ -99,26 +98,10 @@ Unplug any existing `UNRAID_DR` USB first, or the script will (correctly) refuse
 - [ ] Stick too small (if you have one under 95% of your boot drive's size): it is listed under "Not available" with `too small ... minimum is ...`.
 - [ ] Run `dr_usb_backup.sh` and `dr_usb_scrub.sh -backup` against the new stick. **Expect:** clean.
 
-## Step 6 - Remote backup (needs a destination)
+## Step 6 - (removed in 1.3.0)
 
-Follow [the remote backup guide](dr_usb_backup.md#remote-backup--remote) steps 1-5 (including `rrsync`).
-
-- [ ] On the destination: `rrsync -h` lists `-wo`. Version/location noted in the environment table.
-- [ ] **Dry run:** `bash /boot/config/plugins/dr_usb/dr_usb_backup.sh -remote -debug`
-  - **Expect:** `Boot file hashes OK`, `Destination OK: writable, and the key is restricted to rrsync.`, a dry-run rsync listing, `script completed.`
-  - Any `rsync error` mentioning a refused option means `rrsync` rejected a flag: **record the exact message**.
-- [ ] **Failure drills** (undo each one afterwards):
-  - [ ] Remove `command="rrsync ..."` from the key line on the destination. **Expect:** `SECURITY CHECK FAILED ... can run arbitrary commands`, and nothing is sent.
-  - [ ] Change `from="..."` to a wrong address. **Expect:** `Could not reach or write to the destination` with rsync's own message.
-  - [ ] Point `rrsync` at a folder that doesn't exist. **Expect:** the same "Could not reach or write" error.
-- [ ] **Real run:** `bash /boot/config/plugins/dr_usb/dr_usb_backup.sh -remote; echo "exit=$?"`. **Expect:** `Remote mirror completed successfully`, `exit=0`.
-- [ ] **On the destination** (as an administrator): the backup folder holds a copy of `/boot` including `previous/`, with `EFI` exactly as on the live drive, and **no** `.dr_usb_probe` file left behind.
-- [ ] **The key is truly restricted:** from the Unraid server, using the key copied to RAM (see the guide's "test SSH by hand"), `ssh ... true` is refused, and the key cannot list or download the backup.
-- [ ] **Scrub the remote mirror:** `bash /boot/config/plugins/dr_usb/dr_usb_scrub.sh -backup` (with `remote.ini` present).
-  - **Expect:** `CHECKING THE REMOTE BACKUP`, `The Unraid-hashed files on the remote mirror match the live drive.`, `SCRUB CLEAN`.
-  - If you see `THE CHECKSUM COMPARISON COULD NOT RUN`, **record the rsync message** (likely an `rrsync` option restriction).
-- [ ] **Remote failure drill:** as destination admin, append a byte to `previous/memtest` in the backup folder. Scrub. **Expect:** `[REMOTE MIRROR]  previous/memtest` ... `DIFFERS from the verified live file`, `exit=1`. Repair: delete that file on the destination, run the backup, scrub clean.
-- [ ] (Optional) A daily/weekly scheduled run works from your scheduler (User Scripts wrapper, cron or Komodo).
+The remote backup (`-remote`) was removed in 1.3.0, so there is nothing to test here. The step number is kept so the
+other steps and the results table stay in the same order.
 
 ## Step 7 - Restore rehearsal (spare stick, test machine)
 
@@ -169,7 +152,7 @@ Follow [the remote backup guide](dr_usb_backup.md#remote-backup--remote) steps 1
 | 3 - local backup | | | |
 | 4 - scrub, local backup + drills | | | |
 | 5 - create (spare stick) | | | |
-| 6 - remote backup, scrub + drills | | | |
+| 6 - (removed in 1.3.0) | n/a | n/a | n/a |
 | 7 - restore rehearsal | | | |
 | 8 - Ventoy upgrade | | | |
 
@@ -179,6 +162,6 @@ Send the following (nothing in them is secret, but skim the log before sharing):
 
 1. The exact command you ran and what you expected.
 2. The complete log file: `/boot/logs/unraid-dr/logs/` (`boot-check-*.log`, `usb-create-*.log` or `scrub-*.log`). For the restore script, the full terminal output, since it has no log file.
-3. `uname -a`, the Unraid version, `bash --version | head -1`, `rsync --version | head -1`, and for remote problems the destination's `rrsync -h` output.
+3. `uname -a`, the Unraid version, `bash --version | head -1`, `rsync --version | head -1`.
 
 Failures are written to be diagnosed from the output alone: the messages name the file, the cause and the next step.

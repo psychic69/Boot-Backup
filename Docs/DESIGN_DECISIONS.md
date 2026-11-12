@@ -30,6 +30,7 @@ rejected, and what we learned about Unraid along the way. It is deliberately sep
 - [Version 1.2.1](#version-121)
 - [Version 1.2.2](#version-122)
 - [Version 1.2.3](#version-123)
+- [Version 1.3.0](#version-130)
 
 ---
 
@@ -74,6 +75,8 @@ drive.**
   `setup_ventoy_usb.sh` copies *only that file* onto the Ventoy recovery USB, where `lib/` does not exist.
 
 #### D-1.2.0-04 — Settings in an optional `dr_usb.ini`; `remote.ini` stays separate
+
+> **Changed in 1.3.0:** `remote.ini` no longer exists (see D-1.3.0-01); `dr_usb.ini` gained `NOTIFY_ON_FAILURE` (D-1.3.0-02). The rest still applies.
 - **Decision:** `LOG_DIR`, `SNAPSHOTS`, `RETENTION_DAYS`, `CLONE_MP` (and an optional `REMOTE_INI` location) moved out of
   the scripts into `dr_usb.ini` beside them. Every value has a built-in default, so the file is optional.
   `remote.ini` is its own file and defaults to beside the scripts.
@@ -117,6 +120,8 @@ drive.**
 - **Related:** `-debug` and `-lsblk` never format; the script unmounts a mounted target first and refuses `/boot`.
 
 #### D-1.2.0-09 — Creation must happen on the Unraid server; `-remote` is backup-only
+
+> **Changed in 1.3.0:** `-remote` no longer exists on any script (D-1.3.0-01); `dr_usb_create.sh` still must run on the Unraid server.
 - **Decision:** `dr_usb_create.sh` stops unless it is running on an Unraid server with `/boot` mounted, and rejects
   `-remote` with an explanation. `-lsblk` test mode skips the check (it never formats).
 - **Why:** the backup USB must be made from, and plugged into, the server whose boot drive it protects. `-remote` only
@@ -156,6 +161,8 @@ drive.**
 ### C. The remote backup and its security
 
 #### D-1.2.0-12 — `-remote` mirrors `/boot` over SSH with rsync, using a private key staged in RAM
+
+> **Removed in 1.3.0:** the whole remote backup was removed (see D-1.3.0-01). Kept here as history.
 - **Decision:** settings in `remote.ini`; key and pinned `known_hosts` on the flash drive; the script copies the key to
   `/dev/shm` with mode 600 for the run and deletes it on exit. `StrictHostKeyChecking=yes`, `BatchMode=yes`. A `flock`
   stops overlapping runs. `--delete-after` so nothing is deleted on the destination until the transfer succeeded.
@@ -165,6 +172,8 @@ drive.**
 - **Known limit:** anyone who can read the flash drive (for example through an exported `flash` SMB share) can read the key.
 
 #### D-1.2.0-13 — The destination MUST lock the key with `rrsync` (write-only, one folder, no shell)
+
+> **Removed in 1.3.0:** the whole remote backup was removed (see D-1.3.0-01). Kept here as history.
 - **Decision:** the key in `authorized_keys` must read
   `restrict,from="<unraid-ip>",command="rrsync -wo <backup folder>" ...`. The script enforces it: a small rsync probe push
   must succeed (so the connection, key, host key, `rrsync` and the folder all work), and then `ssh <host> true` must
@@ -188,11 +197,15 @@ drive.**
   destination with `-remote -debug`.
 
 #### D-1.2.0-14 — Superseded: the first remote design used SSH commands and a `REMOTE_DIR`
+
+> **Removed in 1.3.0:** the whole remote backup was removed (see D-1.3.0-01). Kept here as history.
 - **Superseded by D-1.2.0-13.** The first version ran `mkdir -p`, `test -w` and `command -v rsync` over SSH and checked that
   `REMOTE_DIR` was at least two levels deep. That requires a key that can run commands, which is the thing D-1.2.0-13
   removes. An old `REMOTE_DIR` line is ignored with a warning.
 
 #### D-1.2.0-15 — What the remote design does *not* protect, and where that is handled
+
+> **Removed in 1.3.0:** the whole remote backup was removed (see D-1.3.0-01). Kept here as history.
 - **Decision:** the documentation states plainly that a compromised Unraid can still overwrite or delete the contents of
   the backup folder (the mirror must write and delete there). The protection is on the destination: its own snapshots
   (ZFS/btrfs/LVM or a hard-link cron copy) that the Unraid key cannot reach, and a firewall that accepts SSH only from
@@ -200,6 +213,8 @@ drive.**
 - **Why:** this cannot be solved inside the scripts without giving up the 1:1 mirror (see D-1.2.0-06).
 
 #### D-1.2.0-16 — Everything on the Unraid side runs as root; the destination account is the sandbox
+
+> **Removed in 1.3.0:** the whole remote backup was removed (see D-1.3.0-01). Kept here as history.
 - **Decision:** accepted and documented, not worked around. Unraid has no unprivileged accounts, so the scripts, the key
   and the settings sit with root. The destination user is dedicated, unprivileged, and (per D-1.2.0-13) can do almost nothing.
 - **Why:** this is Unraid's security model. The scripts therefore compensate with strict checks (refusing the boot drive,
@@ -257,6 +272,8 @@ drive.**
   preflight failures carry the same detail.
 
 #### D-1.2.0-22 — The scrub never compares live to backup; it checks each side on its own terms
+
+> **Changed in 1.3.0:** the remote-mirror comparison described here was removed (D-1.3.0-01); the local-USB checks still apply.
 - **Decision:** the backup is for disaster recovery, not a perfect sync, so configuration changes since the last backup are
   unavoidable and never reported. The local USB is checked against Unraid's hashes plus its own manifest. The remote mirror
   is compared by an rsync **checksum dry run** (`-rlcn --itemize-changes`) limited to the Unraid-hashed files, which only
@@ -275,6 +292,8 @@ drive.**
 ### F. Recovery USB (Ventoy) tooling
 
 #### D-1.2.0-30 — The scrub bypasses the file cache one file at a time
+
+> **Changed in 1.3.0:** the remote-mirror limit mentioned in "Limits" is moot (D-1.3.0-01).
 - **Decision:** with `HASH_BYPASS_CACHE=true` (set only by `dr_usb_scrub.sh`), `sha256_of` in `lib/integrity.sh` first runs
   `dd if=<file> iflag=nocache count=0`, which tells the kernel to drop that one file's cached pages, then hashes it. If `dd`
   cannot do this the scrub warns that a clean result may reflect RAM; the backup preflight and the restore are unchanged.
@@ -460,6 +479,8 @@ Not built, not decided; listed so they are not lost. Each needs the owner's go-a
 ### C. The remote backup and its security
 
 #### D-1.2.3-01 — The "key is restricted" probe runs `id`, not `true`
+
+> **Removed in 1.3.0:** the whole remote backup was removed (see D-1.3.0-01). Kept here as history.
 - **Decision:** `remote_prepare` proves the key cannot run arbitrary commands by running `ssh ... id` against the destination. Exit 0
   means the command ran, so the key is unrestricted and the run is refused. Any non-zero exit (rrsync rejects it) passes.
 - **Why:** the first real `-remote` run was refused with `SECURITY CHECK FAILED` although `authorized_keys` was correct
@@ -471,3 +492,62 @@ Not built, not decided; listed so they are not lost. Each needs the owner's go-a
   *Keep `true` and also run `id`* - the `true` probe adds nothing.
 - **Residual:** if some future rrsync also accepted `id`, the check would pass wrongly; the unit test only stubs ssh, so the real
   behavior is covered by the by-hand result above (rrsync 3.4.1), not by the test suite.
+
+---
+
+## Version 1.3.0
+
+*Branch `local_only`: the remote backup was removed so its architecture can be rethought (possibly in a new repository).*
+
+### G. Removing the remote backup
+
+#### D-1.3.0-01 — All remote backup code is removed; the project is local-only again
+- **Decision:** removed `dr_usb_backup.sh -remote` and `remote_backup()`, `lib/remote.sh`, `remote.ini.example`, the remote-mirror
+  check in `dr_usb_scrub.sh`, the `REMOTE_INI` setting, the `-remote` rejection in `dr_usb_create.sh`, their tests, and every
+  mention in the docs. Nothing is deleted from history: the last version with the remote code is `main` at commit `d1101d3`
+  (version 1.2.3, which was never tagged or packaged; `v1.2.2` is the last tagged release that has it).
+- **Why:** the first real-hardware run showed the design did not do what the owner needs. The push mirror (D-1.2.0-12/13) puts a
+  plain folder of files on another server, which cannot be used by `move_dr_to_unraid.sh`; recovery from it is a manual rebuild
+  of a flash drive. What the owner wants is a real `UNRAID_DR` USB attached to the *other* server, built exactly like the
+  local one. That is a different architecture, so the existing code is removed rather than bent.
+- **Why a USB on another server at all:** Unraid counts every attached storage device against the license's device limit when it
+  boots and starts the array, and the owner has no spare slot, so the `UNRAID_DR` USB cannot stay plugged into the Unraid server
+  across a reboot (plugging it in while the array runs is fine). See D-1.3.0-03.
+- **Options discussed and NOT chosen (for whoever revisits this):**
+  1. *Push with `rrsync -wo` and everything else done on the Unraid side* (marker, `EFI-` via a second rsync into `EFI-/`,
+     a manifest computed from `/boot`), with the stick mounted by systemd automount with an idle timeout so it is never left
+     mounted. No new software on the target; no read-back verification.
+  2. *Pull: run `dr_usb_backup.sh` on the target and read `/boot` from Unraid read-only.* Needs a read-only forced command on
+     Unraid. Unraid has no Python, so `rrsync` cannot be used there; the plan was a ~40-line bash wrapper distilled from
+     rrsync's `-ro` mode (sender only, option allow-list, path checks, `--confine-root`), with the scrub's live check as a
+     preflight on the Unraid side. `/boot` is FAT32, so rrsync's symlink/race pinning is not needed.
+  3. *A small HTTPS receiver (REST-style) on the target that mounts the stick, takes the files, then does the marker, `EFI-`
+     and manifest.* Costs: server code, mount privileges, a transfer protocol, own auth and TLS.
+  4. *Mounting the stick on Unraid over NFS/SMB and running `clone_backup` unchanged.* No TLS; a hung mount can stall scripts.
+- **Facts learned that the next design should reuse:**
+  - rrsync special-cases the command `true` and exits 0 (so `ssh host true` proves nothing about a restricted key; use a real
+    command such as `id`, which it rejects). This is what D-1.2.3-01 fixed.
+  - `--confine-root` (which stops a client reading files outside the served folder through filter rules) is in rsync 3.5.0+.
+    Unraid first ships rsync 3.5.0 in 7.3.3 (7.3.2 has 3.4.4); the owner runs 7.3.4 with rsync 3.5.1. Validate the rsync
+    version and that `--confine-root` appears in `rsync --help`, and fail closed.
+  - Unraid rebuilds root's `authorized_keys` from `/boot/config/ssh/root.pubkeys` on boot (to be verified before relying on it).
+- **Not done / parked:** any replacement for the remote backup. The remote ideas live in this journal only.
+
+#### D-1.3.0-02 — `notify_failure` is kept, used for a failed local backup, and configured in `dr_usb.ini`
+- **Decision:** `notify_failure` (the Unraid GUI notification) stays. It was only called for remote failures and by the scrub;
+  the backup now also calls it when `clone_backup` fails. Its title changed from "Remote boot backup FAILED" to "Boot backup
+  problem". `NOTIFY_ON_FAILURE` (default `true`) used to live only in `remote.ini`; it moved into `dr_usb.ini`
+  (`lib/config.sh` default, validated as `true` or `false`).
+- **Limit:** several failure paths in `main_backup` call `exit 1` directly (for example "no `UNRAID_DR` partition found"), so
+  those do not send a notification; only a failed clone does. Not changed, to keep this release to the removal.
+
+#### D-1.3.0-03 — The docs warn about license device slots
+- **Decision:** the README, GETTING_STARTED, `dr_usb_create.md` and `dr_usb_backup.md` say that Unraid counts every attached
+  storage device against the license when it boots, that the `UNRAID_DR` USB counts as one, and that the user must check for a
+  spare slot and remove the USB before rebooting if there is none.
+- **Why:** the owner hit this: with no spare slot, the array does not start after a reboot while the USB is plugged in. The old
+  note only said the USB "consumes a license slot".
+
+#### D-1.3.0-04 — The scrub checks the live drive and, with `-backup`, only the local `UNRAID_DR` USB
+- **Decision:** `scrub_remote_backup` and the "`remote.ini` decides" choice are gone; `-backup` always checks the local USB.
+  A leftover `remote.ini` is ignored.

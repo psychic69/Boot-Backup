@@ -1,5 +1,5 @@
 #!/bin/bash
-# Startup behavior of dr_usb_create.sh: terminal check, -remote refusal, Unraid-server check, -lsblk bypass.
+# Startup behavior of dr_usb_create.sh: terminal check, Unraid-server check, -lsblk bypass.
 source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
 echo "test_create_startup"
 SCRIPT="$REPO_ROOT/dr_usb_create.sh"
@@ -9,9 +9,7 @@ out=$(bash "$SCRIPT" </dev/null 2>&1); rc=$?
 assert_eq "no terminal: refused" "1" "$rc"; assert_contains "no terminal: message" "$out" "interactive and must be run from an SSH terminal"
 
 out=$(run_pty "" bash "$SCRIPT" -remote)
-assert_contains "-remote refused" "$out" "-remote is not supported by dr_usb_create.sh"
-assert_contains "-remote explanation" "$out" "must be created locally"
-assert_contains "-remote points to the backup script" "$out" "dr_usb_backup.sh -remote"
+assert_contains "-remote was removed: unknown option" "$out" "Unknown option"
 assert_contains "-remote exit code" "$out" "rc=1"
 
 if [ ! -f /etc/unraid-version ] && ! uname -a | grep -q Unraid; then

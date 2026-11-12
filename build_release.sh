@@ -6,7 +6,7 @@
 #
 # The version comes from the VERSION file (SCRIPT_VERSION=x.y.z). The archive contains a single
 # top-level folder, dr_usb/, which is extracted to /boot/config/plugins/ on the Unraid server.
-# User settings (dr_usb.ini, remote.ini, SSH keys) are never in the archive, so upgrading
+# User settings (dr_usb.ini) are never in the archive, so upgrading
 # by extracting over an existing install does not overwrite them.
 
 set -euo pipefail
@@ -33,13 +33,11 @@ FILES=(
     dr_usb_create.sh
     dr_usb_scrub.sh
     dr_usb.ini.example
-    remote.ini.example
     lib/logging.sh
     lib/drives.sh
     lib/integrity.sh
     lib/clone.sh
     lib/config.sh
-    lib/remote.sh
     Recovery-ISO/scripts/setup_ventoy_usb.sh
     Recovery-ISO/scripts/setup_ventoy.ini
     Recovery-ISO/scripts/move_dr_to_unraid.sh
